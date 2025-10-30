@@ -1,0 +1,17 @@
+# 机型伪装配置文件
+# 为不同的应用配置不同的伪装机型
+
+[[apps]]
+package = "com.omarea.vtools"
+manufacturer = "Xiaomi"
+brand = "Xiaomi"
+marketname = "Xiaomi 17 Pro Max"
+model = "2509FPN0BC"
+name = "popsicle"
+
+[[apps]]
+package = "com.coolapk.market"
+manufacturer = "Nothing"
+brand = "Nothing"
+marketname = "Nothing Phone (3)"
+model = "A024"

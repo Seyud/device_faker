@@ -1,0 +1,7 @@
+id=device_faker
+name=Device Faker
+version=v1.0.0
+versionCode=20251030
+author=酷安@瓦力喀
+description=使用Zygisk实现自定义配置对应用伪装机型
+updateJson=https://gitee.com/Seyud/device_faker/raw/master/Update.json

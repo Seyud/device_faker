@@ -1,0 +1,30 @@
+[package]
+name = "device_faker"
+version = "1.0.0"
+edition = "2021"
+authors = ["Seyud"]
+
+[dependencies]
+anyhow = "1.0.100"
+jni = "^0.21"
+jni-sys = "^0.4"
+log = "^0.4"
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+zygisk-rs = { git = "https://github.com/Kr328/zygisk-rs", rev = "bf277f9a", default-features = false, features = ["v4"]}
+
+[lib]
+name = "zygisk"
+crate-type = ["dylib"]
+
+[target.'cfg(target_os = "android")'.dependencies]
+android_logger = "^0.14"
+
+[profile.release]
+strip = "symbols"
+opt-level = 3
+debug = 0
+debug-assertions = false
+lto = "fat"
+incremental = false
+codegen-units = 1
