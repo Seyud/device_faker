@@ -2,7 +2,7 @@ mod config;
 
 use config::Config;
 use jni::JNIEnv;
-use log::{error, info};
+use log::error;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::{fs::File, io::Read};
@@ -29,19 +29,14 @@ struct MyModule {
 
 impl Module for MyModule {
     fn new(api: Api, env: *mut jni_sys::JNIEnv) -> Self {
-        // 每个应用进程都会创建新的模块实例，这里会重新初始化日志
+        // 初始化日志，使用 Error 级别减少日志输出，防止留痕
         android_logger::init_once(
             android_logger::Config::default()
-                .with_max_level(log::LevelFilter::Trace) // 使用 Trace 级别
+                .with_max_level(log::LevelFilter::Error) // 只记录错误，提高隐蔽性
                 .with_tag("DeviceFaker"),
         );
 
         let env = unsafe { JNIEnv::from_raw(env.cast()).unwrap() };
-
-        // 输出初始化日志
-        log::info!("========================================");
-        log::info!("DeviceFaker Module Instance Created");
-        log::info!("========================================");
 
         Self { api, env }
     }
@@ -59,44 +54,20 @@ impl Module for MyModule {
                 .to_string_lossy()
                 .to_string();
 
-            info!("=== DeviceFaker: Processing app: {} ===", package_name);
-
             // 读取配置文件
             let config_path = "/data/adb/device_faker/config/config.toml";
-            info!("Loading config from: {}", config_path);
 
             // 检查文件是否存在
             if !std::path::Path::new(config_path).exists() {
-                error!("Config file does not exist: {}", config_path);
-                info!("Module will be unloaded for this app");
                 self.api
                     .set_option(zygisk_rs::ModuleOption::DlcloseModuleLibrary);
                 return Ok(());
             }
 
-            // 尝试读取文件元数据以检查权限
-            match std::fs::metadata(config_path) {
-                Ok(metadata) => {
-                    info!(
-                        "Config file metadata: readonly={}, len={}",
-                        metadata.permissions().readonly(),
-                        metadata.len()
-                    );
-                }
-                Err(e) => {
-                    error!("Failed to get config file metadata: {}", e);
-                }
-            }
-
             let mut config_file = match File::open(config_path) {
-                Ok(file) => {
-                    info!("Config file opened successfully");
-                    file
-                }
+                Ok(file) => file,
                 Err(e) => {
-                    error!("Failed to open config file {}: {}", config_path, e);
-                    error!("Error details: {:#?}", e);
-                    info!("Module will be unloaded for this app");
+                    error!("Failed to open config: {}", e);
                     self.api
                         .set_option(zygisk_rs::ModuleOption::DlcloseModuleLibrary);
                     return Ok(());
@@ -107,29 +78,17 @@ impl Module for MyModule {
             config_file.read_to_string(&mut config_content)?;
 
             let config = Config::from_toml(&config_content)?;
-            info!("Loaded config with {} apps", config.apps.len());
 
             // 查找当前应用的配置
             let app_config = match config.get_app_config(&package_name) {
-                Some(cfg) => {
-                    info!("Found config for app: {}", package_name);
-                    cfg
-                }
+                Some(cfg) => cfg,
                 None => {
-                    info!("App {} not in config, skipping", package_name);
+                    // 应用不在配置中，立即卸载模块
                     self.api
                         .set_option(zygisk_rs::ModuleOption::DlcloseModuleLibrary);
                     return Ok(());
                 }
             };
-
-            info!(
-                "Faking device for {}: {} {} ({})",
-                package_name,
-                app_config.brand.as_deref().unwrap_or("N/A"),
-                app_config.model.as_deref().unwrap_or("N/A"),
-                app_config.name.as_deref().unwrap_or("N/A")
-            );
 
             // 构建属性映射表（用于 SystemProperties Hook）
             let prop_map = Config::build_property_map(app_config);
@@ -143,15 +102,24 @@ impl Module for MyModule {
             // Hook SystemProperties.native_get
             self.hook_system_properties()?;
 
+            // 完成伪装后立即卸载模块，减少在内存中的存在时间
+            self.api
+                .set_option(zygisk_rs::ModuleOption::DlcloseModuleLibrary);
+
             Ok(())
         };
 
         if let Err(e) = inner() {
-            error!("pre_app_specialize error: {:?}", e);
+            error!("Error: {:?}", e);
         }
     }
 
-    fn post_app_specialize(&mut self, _args: &AppSpecializeArgs) {}
+    fn post_app_specialize(&mut self, _args: &AppSpecializeArgs) {
+        // 额外的隐身策略：在 post_app_specialize 阶段再次确保模块卸载
+        // 即使 pre_app_specialize 中已经卸载，这里再次调用以提高隐蔽性
+        self.api
+            .set_option(zygisk_rs::ModuleOption::DlcloseModuleLibrary);
+    }
 
     fn pre_server_specialize(&mut self, _args: &mut ServerSpecializeArgs) {
         self.api
@@ -164,8 +132,6 @@ impl Module for MyModule {
 impl MyModule {
     /// Hook Build 类的静态字段
     fn hook_build_fields(&mut self, app_config: &config::AppConfig) -> anyhow::Result<()> {
-        info!("Hooking Build class fields...");
-
         // 查找 android.os.Build 类
         let build_class = self.env.find_class("android/os/Build")?;
 
@@ -186,8 +152,6 @@ impl MyModule {
             self.set_build_field(&build_class, "PRODUCT", name)?;
             self.set_build_field(&build_class, "DEVICE", name)?;
         }
-
-        info!("Build class fields hooked successfully");
 
         Ok(())
     }
@@ -211,15 +175,11 @@ impl MyModule {
             jni::objects::JValue::Object(&new_value),
         )?;
 
-        info!("Set Build.{} = {}", field_name, value);
-
         Ok(())
     }
 
     /// Hook SystemProperties.native_get 方法
     fn hook_system_properties(&mut self) -> anyhow::Result<()> {
-        info!("Hooking SystemProperties.native_get...");
-
         // 定义要 Hook 的 JNI 方法
         let mut methods = [jni_sys::JNINativeMethod {
             name: c"native_get".as_ptr() as *mut u8,
@@ -240,11 +200,6 @@ impl MyModule {
             std::mem::transmute::<*mut std::ffi::c_void, OriginalNativeGet>(methods[0].fnPtr)
         };
         *ORIGINAL_NATIVE_GET.lock().unwrap() = Some(original_fn_ptr);
-
-        info!(
-            "SystemProperties.native_get hooked successfully, original function saved at: {:p}",
-            methods[0].fnPtr
-        );
 
         Ok(())
     }
@@ -282,8 +237,6 @@ unsafe extern "C" fn native_get_hook(
     let fake_props = FAKE_PROPS.lock().unwrap();
     if let Some(props) = fake_props.as_ref() {
         if let Some(fake_value) = props.get(&key_str) {
-            info!("Faking property [{}] = {}", key_str, fake_value);
-
             // 返回伪装的值
             let fake_cstr = std::ffi::CString::new(fake_value.as_str()).unwrap();
             return (jni_funcs.NewStringUTF)(env, fake_cstr.as_ptr());
