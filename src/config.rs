@@ -158,7 +158,6 @@ impl Config {
             map.insert("ro.product.device".to_string(), device.clone());
         }
         if let Some(product) = &merged.product {
-            map.insert("ro.product.name".to_string(), product.clone());
             map.insert("ro.build.product".to_string(), product.clone());
         }
         if let Some(fingerprint) = &merged.fingerprint {

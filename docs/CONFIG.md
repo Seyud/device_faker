@@ -135,12 +135,24 @@ model = "SM-S9280"
 
 ### 应用配置字段说明
 
-**注意**：
-- 除了 `package` 外，所有字段都是可选的
-- 使用模板的 `packages` 时，无需写 [[apps]]（自动应用）
+**字段与系统属性映射关系**:
+| 字段 | 对应系统属性 | 说明 |
+|------|------------|------|
+| `manufacturer` | `ro.product.manufacturer` | 制造商 (如: Xiaomi, Samsung) |
+| `brand` | `ro.product.brand` | 品牌 (如: Redmi, Nothing) |
+| `marketname` | `ro.product.marketname` | 市场名称 (如: REDMI K90 Pro Max) |
+| `model` | `ro.product.model` | 型号 (如: 25102RK69C) |
+| `name` | `ro.product.name` | 产品名称 (如: myron) |
+| `device` | `ro.product.device` | 设备代号 (如: myron) |
+| `product` | `ro.build.product` | 构建产品 (如: myron) |
+| `fingerprint` | `ro.build.fingerprint` | 指纹信息 |
+
+**注意**:
+- 除了 `package` 外,所有字段都是可选的
+- 使用模板的 `packages` 时,无需写 [[apps]](自动应用)
 - [[apps]] 中的字段会覆盖模板的配置
-- `name` 和 `marketname` 仅在 **full 模式**下有效（影响 SystemProperties）
-- **lite 模式**下，只有 `manufacturer`、`brand`、`model`、`device`、`product`、`fingerprint` 生效
+- `name` 和 `marketname` 仅在 **full 模式**下有效(影响 SystemProperties)
+- **lite 模式**下,只有 `manufacturer`、`brand`、`model`、`device`、`product`、`fingerprint` 生效
 
 ## 模式对比
 
