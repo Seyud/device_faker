@@ -1,15 +1,15 @@
 mod config;
 
 use config::Config;
+use jni::JNIEnv;
 use jni::objects::{JClass, JString, JValue};
 use jni::sys::JNINativeMethod;
-use jni::JNIEnv;
 use log::{error, info};
 use std::collections::HashMap;
 use std::sync::Mutex;
-use zygisk_api::api::v5::ZygiskOption;
-use zygisk_api::api::{ZygiskApi, V5};
 use zygisk_api::ZygiskModule;
+use zygisk_api::api::v4::ZygiskOption;
+use zygisk_api::api::{V4, ZygiskApi};
 
 // 全局状态:存储当前应用的伪装属性
 static FAKE_PROPS: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
@@ -32,9 +32,9 @@ static ORIGINAL_NATIVE_GET: Mutex<Option<OriginalNativeGet>> = Mutex::new(None);
 struct MyModule;
 
 impl ZygiskModule for MyModule {
-    type Api = V5;
+    type Api = V4;
 
-    fn on_load(&self, _api: ZygiskApi<V5>, _env: JNIEnv) {
+    fn on_load(&self, _api: ZygiskApi<V4>, _env: JNIEnv) {
         // 默认只记录错误，减少日志输出以提高隐蔽性
         // 可以通过配置文件的 debug = true 启用详细日志
         android_logger::init_once(
@@ -46,9 +46,9 @@ impl ZygiskModule for MyModule {
 
     fn pre_app_specialize(
         &self,
-        mut api: ZygiskApi<V5>,
+        mut api: ZygiskApi<V4>,
         mut env: JNIEnv,
-        args: &mut <V5 as zygisk_api::raw::ZygiskRaw>::AppSpecializeArgs,
+        args: &mut <V4 as zygisk_api::raw::ZygiskRaw>::AppSpecializeArgs,
     ) {
         let mut inner = || -> anyhow::Result<()> {
             // 获取包名
@@ -169,9 +169,9 @@ impl ZygiskModule for MyModule {
 
     fn post_app_specialize(
         &self,
-        mut api: ZygiskApi<V5>,
+        mut api: ZygiskApi<V4>,
         _env: JNIEnv,
-        _args: &<V5 as zygisk_api::raw::ZygiskRaw>::AppSpecializeArgs,
+        _args: &<V4 as zygisk_api::raw::ZygiskRaw>::AppSpecializeArgs,
     ) {
         // 只在非 full 模式下卸载模块
         // full 模式下，Hook 函数需要保持在内存中，否则会导致崩溃
@@ -185,9 +185,9 @@ impl ZygiskModule for MyModule {
 
     fn pre_server_specialize(
         &self,
-        mut api: ZygiskApi<V5>,
+        mut api: ZygiskApi<V4>,
         _env: JNIEnv,
-        _args: &mut <V5 as zygisk_api::raw::ZygiskRaw>::ServerSpecializeArgs,
+        _args: &mut <V4 as zygisk_api::raw::ZygiskRaw>::ServerSpecializeArgs,
     ) {
         api.set_option(ZygiskOption::DlCloseModuleLibrary);
     }
@@ -257,7 +257,7 @@ impl MyModule {
     }
 
     /// Hook SystemProperties.native_get 方法
-    fn hook_system_properties(api: &mut ZygiskApi<V5>, env: &JNIEnv) -> anyhow::Result<()> {
+    fn hook_system_properties(api: &mut ZygiskApi<V4>, env: &JNIEnv) -> anyhow::Result<()> {
         // 定义要 Hook 的 JNI 方法
         let mut methods = [JNINativeMethod {
             name: c"native_get".as_ptr() as *mut u8,
@@ -295,13 +295,13 @@ unsafe extern "C" fn native_get_hook(
     def: jni::sys::jstring,
 ) -> jni::sys::jstring {
     // 创建 JNIEnv 包装器
-    let mut env_wrapper = match JNIEnv::from_raw(env) {
+    let mut env_wrapper = match unsafe { JNIEnv::from_raw(env) } {
         Ok(e) => e,
         Err(_) => return def,
     };
 
     // 获取属性名
-    let key_jstring = JString::from_raw(key);
+    let key_jstring = unsafe { JString::from_raw(key) };
     let key_str = match env_wrapper.get_string(&key_jstring) {
         Ok(s) => s,
         Err(_) => return def,
@@ -331,7 +331,7 @@ unsafe extern "C" fn native_get_hook(
     // 未匹配的属性：调用原始 native_get 函数获取真实值
     let original_native_get = ORIGINAL_NATIVE_GET.lock().unwrap();
     if let Some(orig_fn) = *original_native_get {
-        return orig_fn(env, class, key, def);
+        return unsafe { orig_fn(env, class, key, def) };
     }
 
     // 如果原始函数不可用（不应该发生），返回默认值
