@@ -418,6 +418,17 @@ watch(
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
 }
 
+/* 确保对话框内容区域不显示滚动条 */
+.online-template-dialog :deep(.el-dialog__body) {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  overflow-y: auto;
+}
+
+.online-template-dialog :deep(.el-dialog__body::-webkit-scrollbar) {
+  display: none;
+}
+
 @media (prefers-color-scheme: dark) {
   .online-template-dialog :deep(.el-dialog) {
     background: rgba(20, 20, 20, 0.6) !important;

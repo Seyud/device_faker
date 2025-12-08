@@ -110,10 +110,11 @@ body {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
 
-/* 滚动条样式 */
+/* 滚动条样式 - 优化为不影响布局 */
+/* 全局滚动条隐藏 */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 0px;
+  height: 0px;
 }
 
 ::-webkit-scrollbar-track {
@@ -121,8 +122,25 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 3px;
+  background: transparent;
+  border-radius: 0;
+}
+
+/* 确保所有元素滚动时不显示滚动条 */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+/* 恢复主内容区域滚动条但隐藏视觉效果 */
+.main-content {
+  scrollbar-width: thin;
+  -ms-overflow-style: auto;
+}
+
+.main-content::-webkit-scrollbar {
+  width: 0px;
+  height: 0px;
 }
 
 /* 动画 */

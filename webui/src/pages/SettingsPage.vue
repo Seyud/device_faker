@@ -503,6 +503,13 @@ onActivated(() => {
   overflow-y: auto;
   padding: 1.5rem;
   background: transparent;
+  /* 隐藏滚动条 */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.template-dialog :deep(.el-dialog__body::-webkit-scrollbar) {
+  display: none;
 }
 
 .template-dialog :deep(.el-dialog__header) {

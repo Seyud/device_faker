@@ -764,6 +764,13 @@ onUnmounted(() => {
   padding-bottom: 2rem; /* 增加底部内边距 */
   max-height: calc(100vh - 200px); /* 确保有足够的滚动空间 */
   background: transparent;
+  /* 隐藏滚动条 */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.app-config-dialog :deep(.el-dialog__body::-webkit-scrollbar) {
+  display: none;
 }
 
 .app-config-dialog :deep(.el-dialog__header) {

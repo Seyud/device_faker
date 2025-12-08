@@ -260,13 +260,12 @@ onUnmounted(() => {
 
 .main-content {
   flex: 1;
-  overflow-y: auto;
+  overflow-y: scroll;
   padding: 0 1rem;
   padding-bottom: 5.5rem; /* 为固定定位的底栏留出空间 */
-  /* 为滚动条预留固定空间，防止出现/消失时页面跳动 */
-  scrollbar-gutter: stable;
-  /* 兼容旧浏览器的备选方案 */
-  overflow-y: scroll;
+  /* 优化滚动性能 */
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
 }
 
 .bottom-nav {

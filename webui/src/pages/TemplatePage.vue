@@ -714,6 +714,13 @@ onActivated(() => {
   border-radius: 0.5rem;
   max-height: 300px;
   overflow-y: auto;
+  /* 隐藏滚动条 */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.package-list::-webkit-scrollbar {
+  display: none;
 }
 
 .package-list-empty {
@@ -852,19 +859,15 @@ onActivated(() => {
   }
 }
 
-/* 对话框内容区域滚动条处理 */
+/* 对话框内容区域滚动优化 - 确保不显示滚动条 */
 .template-dialog :deep(.el-dialog__body) {
-  /* 移除滚动条，防止影响主页面布局 */
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE/Edge */
-  /* 确保对话框内容滚动不会影响主页面 */
   contain: layout style paint;
-  /* 优化滚动体验 */
   overflow-y: auto;
   overflow-x: hidden;
 }
 
-/* 隐藏对话框内容区域滚动条 */
 .template-dialog :deep(.el-dialog__body::-webkit-scrollbar) {
   display: none; /* Chrome/Safari/Opera */
 }
