@@ -170,6 +170,14 @@ model = "SM-S9280"
 | `characteristics` | ❌ | `ro.build.characteristics` | 特性 (如: tablet) - 仅 resetprop 模式生效 |
 | `force_denylist_unmount` | N/A | N/A | 是否对该应用强制卸载模块挂载点；未指定时使用 `default_force_denylist_unmount` |
 
+**配置元数据字段**（仅用于显示，不影响伪装效果）:
+| 字段 | 说明 |
+|------|------|
+| `version` | 配置版本号 (如: "v1.0") |
+| `version_code` | 配置版本码 (如: 20251212) |
+| `author` | 配置作者 |
+| `description` | 配置描述信息 |
+
 **关于 `force_denylist_unmount`**：
 - 可写在全局（`default_force_denylist_unmount`）、模板或单个 `[[apps]]`。
 - 优先级：单个应用 > 模板 > 全局默认。

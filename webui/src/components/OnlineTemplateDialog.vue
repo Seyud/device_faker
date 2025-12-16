@@ -69,6 +69,36 @@
             </p>
           </div>
 
+          <!-- 可选元数据字段 -->
+          <div
+            v-if="
+              template.template &&
+              (template.template.version ||
+                template.template.version_code ||
+                template.template.author ||
+                template.template.description)
+            "
+            class="template-meta"
+          >
+            <p v-if="template.template.version || template.template.version_code" class="meta-line">
+              <span class="label">{{ t('templates.labels.version') }}:</span>
+              <span class="value">
+                {{ template.template.version || '' }}
+                <span v-if="template.template.version_code" class="version-code"
+                  >({{ template.template.version_code }})</span
+                >
+              </span>
+            </p>
+            <p v-if="template.template.author" class="meta-line">
+              <span class="label">{{ t('templates.labels.author') }}:</span>
+              <span class="value">{{ template.template.author }}</span>
+            </p>
+            <p v-if="template.template.description" class="meta-line meta-description">
+              <span class="label">{{ t('templates.labels.description') }}:</span>
+              <span class="value">{{ template.template.description }}</span>
+            </p>
+          </div>
+
           <div class="template-actions">
             <el-button
               type="primary"
@@ -395,6 +425,50 @@ watch(
   color: var(--text);
   flex: 1;
   word-break: break-all;
+}
+
+.template-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--border);
+  margin-top: 0.25rem;
+}
+
+.meta-line {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  margin: 0;
+}
+
+.meta-line .label {
+  color: var(--text-secondary);
+  min-width: 50px;
+  flex-shrink: 0;
+}
+
+.meta-line .value {
+  color: var(--text);
+  flex: 1;
+  word-break: break-all;
+}
+
+.meta-line .version-code {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+.meta-description .value {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.meta-description .label {
+  font-size: 0.75rem;
+  line-height: 1.4;
 }
 
 .template-actions {

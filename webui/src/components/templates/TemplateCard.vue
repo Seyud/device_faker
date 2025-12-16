@@ -57,6 +57,30 @@
         >
       </div>
     </div>
+
+    <!-- 可选元数据字段 -->
+    <div
+      v-if="template.version || template.version_code || template.author || template.description"
+      class="template-meta"
+    >
+      <div v-if="template.version || template.version_code" class="meta-item">
+        <span class="meta-label">{{ t('templates.labels.version') }}:</span>
+        <span class="meta-value">
+          {{ template.version || '' }}
+          <span v-if="template.version_code" class="version-code"
+            >({{ template.version_code }})</span
+          >
+        </span>
+      </div>
+      <div v-if="template.author" class="meta-item">
+        <span class="meta-label">{{ t('templates.labels.author') }}:</span>
+        <span class="meta-value">{{ template.author }}</span>
+      </div>
+      <div v-if="template.description" class="meta-item meta-description">
+        <span class="meta-label">{{ t('templates.labels.description') }}:</span>
+        <span class="meta-value">{{ template.description }}</span>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -185,5 +209,48 @@ const { t } = useI18n()
 .detail-value.fingerprint {
   font-family: monospace;
   font-size: 0.75rem;
+}
+
+.template-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.meta-item {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+}
+
+.meta-label {
+  color: var(--text-secondary);
+  min-width: 50px;
+  flex-shrink: 0;
+}
+
+.meta-value {
+  color: var(--text);
+  flex: 1;
+  word-break: break-all;
+}
+
+.version-code {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+.meta-description .meta-value {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.meta-description .meta-label {
+  font-size: 0.75rem;
+  line-height: 1.4;
 }
 </style>

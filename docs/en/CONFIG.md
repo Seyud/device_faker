@@ -170,6 +170,14 @@ model = "SM-S9280"
 | `characteristics` | ❌ | `ro.build.characteristics` | Characteristics (e.g.: tablet) - only effective in resetprop mode |
 | `force_denylist_unmount` | N/A | N/A | Whether to force-unmount module mount points for this app; falls back to `default_force_denylist_unmount` when unspecified |
 
+**Configuration Metadata Fields** (display only, does not affect spoofing):
+| Field | Description |
+|-------|-------------|
+| `version` | Configuration version (e.g.: "v1.0") |
+| `version_code` | Configuration version code (e.g.: 20251212) |
+| `author` | Configuration author |
+| `description` | Configuration description |
+
 **About `force_denylist_unmount`**:
 - Can be set globally (`default_force_denylist_unmount`), in templates, or per `[[apps]]`.
 - Priority: per-app > template > global default.

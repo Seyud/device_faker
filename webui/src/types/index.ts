@@ -16,12 +16,22 @@ export interface DeviceInfo {
 export interface Template extends DeviceInfo {
   packages?: string[]
   mode?: 'lite' | 'full' | 'resetprop'
+  // 可选的元数据字段
+  version?: string
+  version_code?: number
+  author?: string
+  description?: string
 }
 
 // 应用配置接口
 export interface AppConfig extends DeviceInfo {
   package: string
   mode?: 'lite' | 'full' | 'resetprop'
+  // 可选的元数据字段
+  version?: string
+  version_code?: number
+  author?: string
+  description?: string
 }
 
 // 配置文件接口

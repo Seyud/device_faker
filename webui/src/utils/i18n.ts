@@ -100,6 +100,10 @@ export const messages = {
         mode: '模式',
         packages: '应用包名',
         count_suffix: '个',
+        version: '版本',
+        version_code: '版本号',
+        author: '作者',
+        description: '描述',
       },
       values: {
         lite: 'lite (轻量)',
@@ -352,6 +356,10 @@ export const messages = {
         mode: 'Mode',
         packages: 'Packages',
         count_suffix: 'items',
+        version: 'Version',
+        version_code: 'Version Code',
+        author: 'Author',
+        description: 'Description',
       },
       values: {
         lite: 'lite (Lite)',

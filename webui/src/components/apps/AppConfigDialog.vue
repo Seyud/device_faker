@@ -134,6 +134,27 @@
           </el-select>
         </el-form-item>
       </el-form>
+
+      <!-- 元数据只读显示区域 -->
+      <div v-if="hasMetaData" class="config-meta">
+        <div v-if="customMetaData.version || customMetaData.version_code" class="meta-item">
+          <span class="meta-label">{{ t('templates.labels.version') }}:</span>
+          <span class="meta-value">
+            {{ customMetaData.version || '' }}
+            <span v-if="customMetaData.version_code" class="version-code"
+              >({{ customMetaData.version_code }})</span
+            >
+          </span>
+        </div>
+        <div v-if="customMetaData.author" class="meta-item">
+          <span class="meta-label">{{ t('templates.labels.author') }}:</span>
+          <span class="meta-value">{{ customMetaData.author }}</span>
+        </div>
+        <div v-if="customMetaData.description" class="meta-item meta-description">
+          <span class="meta-label">{{ t('templates.labels.description') }}:</span>
+          <span class="meta-value">{{ customMetaData.description }}</span>
+        </div>
+      </div>
     </div>
 
     <div v-if="configMode === 'remove'" class="remove-hint">
@@ -191,6 +212,24 @@ const customFormData = ref({
   characteristics: '',
   force_denylist_unmount: undefined as boolean | undefined,
   mode: undefined as 'lite' | 'full' | 'resetprop' | undefined,
+})
+
+// 元数据字段（只读显示）
+const customMetaData = ref({
+  version: '' as string | undefined,
+  version_code: undefined as number | undefined,
+  author: '' as string | undefined,
+  description: '' as string | undefined,
+})
+
+// 判断是否有元数据需要显示
+const hasMetaData = computed(() => {
+  return (
+    customMetaData.value.version ||
+    customMetaData.value.version_code ||
+    customMetaData.value.author ||
+    customMetaData.value.description
+  )
 })
 
 const dialogTitle = computed(() =>
@@ -251,6 +290,13 @@ function syncFromExistingConfig() {
     if ('source' in existingConfig) {
       configMode.value = 'template'
       selectedTemplate.value = existingConfig.source
+      // 清空元数据（模板模式下不在此处显示）
+      customMetaData.value = {
+        version: undefined,
+        version_code: undefined,
+        author: undefined,
+        description: undefined,
+      }
     } else {
       configMode.value = 'custom'
       customFormData.value = {
@@ -265,6 +311,13 @@ function syncFromExistingConfig() {
         characteristics: existingConfig.characteristics || '',
         force_denylist_unmount: existingConfig.force_denylist_unmount,
         mode: existingConfig.mode as 'lite' | 'full' | 'resetprop' | undefined,
+      }
+      // 同步元数据字段（只读显示）
+      customMetaData.value = {
+        version: existingConfig.version,
+        version_code: existingConfig.version_code,
+        author: existingConfig.author,
+        description: existingConfig.description,
       }
     }
   } else {
@@ -282,6 +335,12 @@ function syncFromExistingConfig() {
       characteristics: '',
       force_denylist_unmount: undefined,
       mode: undefined,
+    }
+    customMetaData.value = {
+      version: undefined,
+      version_code: undefined,
+      author: undefined,
+      description: undefined,
     }
   }
 }
@@ -378,6 +437,49 @@ watch(
   padding: 1.5rem;
   text-align: center;
   color: var(--text-secondary);
+}
+
+.config-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.meta-item {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+}
+
+.meta-label {
+  color: var(--text-secondary);
+  min-width: 50px;
+  flex-shrink: 0;
+}
+
+.meta-value {
+  color: var(--text);
+  flex: 1;
+  word-break: break-all;
+}
+
+.version-code {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+.meta-description .meta-value {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.meta-description .meta-label {
+  font-size: 0.75rem;
+  line-height: 1.4;
 }
 </style>
 

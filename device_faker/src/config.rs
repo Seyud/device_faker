@@ -2,7 +2,7 @@ use anyhow::Result;
 use serde::Deserialize;
 use std::collections::HashMap;
 
-/// 机型设备信息模板
+/// 机型模板
 #[derive(Debug, Clone, Deserialize)]
 pub struct DeviceTemplate {
     /// 包名列表
