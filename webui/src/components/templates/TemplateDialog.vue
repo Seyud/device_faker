@@ -352,7 +352,7 @@ watch(
 .package-input-wrapper {
   display: flex;
   gap: 0.5rem;
-  align-items: flex-start;
+  align-items: center;
 }
 
 .package-input-wrapper.stacked-layout {
@@ -360,6 +360,24 @@ watch(
 }
 
 .package-autocomplete {
+  width: 100%;
+}
+
+/* 确保输入框和按钮对齐 */
+.package-input-wrapper :deep(.el-input__wrapper) {
+  height: 32px;
+}
+
+.package-input-wrapper .el-button {
+  height: 32px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Make add button full width in stacked layout */
+.package-input-wrapper.stacked-layout .el-button {
   width: 100%;
 }
 
