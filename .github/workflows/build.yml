@@ -77,13 +77,8 @@ jobs:
           npm ci
           npm run build
 
-      - name: Package module as zip
-        run: |
-          cd module
-          zip -r ../Device_Faker.zip .
-
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Device_Faker
-          path: Device_Faker.zip
+          name: device_faker
+          path: module/
