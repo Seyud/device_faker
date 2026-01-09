@@ -23,6 +23,24 @@
         </button>
       </div>
 
+      <!-- 品牌筛选 -->
+      <div class="brand-filter">
+        <button
+          :class="['brand-tab', { active: selectedBrand === null }]"
+          @click="selectedBrand = null"
+        >
+          {{ t('templates.categories.all') }}
+        </button>
+        <button
+          v-for="brand in availableBrands"
+          :key="brand"
+          :class="['brand-tab', { active: selectedBrand === brand }]"
+          @click="selectedBrand = brand"
+        >
+          {{ brand }}
+        </button>
+      </div>
+
       <!-- 加载状态 -->
       <div v-if="loading" class="loading-state">
         <el-icon class="is-loading">
@@ -49,9 +67,12 @@
         >
           <div class="template-header">
             <h4 class="template-title">{{ template.displayName }}</h4>
-            <span class="template-category">{{
-              t('templates.categories.' + template.category)
-            }}</span>
+            <div class="template-tags">
+              <span class="template-category">{{
+                t('templates.categories.' + template.category)
+              }}</span>
+              <span v-if="template.brand" class="template-brand">{{ template.brand }}</span>
+            </div>
           </div>
 
           <div v-if="template.template" class="template-info">
@@ -137,9 +158,11 @@ import { toast } from 'kernelsu-alt'
 import {
   fetchOnlineTemplates,
   downloadTemplate,
+  fetchBrandsByCategory,
   TEMPLATE_CATEGORIES,
   type OnlineTemplate,
   type TemplateCategory,
+  type OnlineTemplatesResult,
 } from '../utils/onlineTemplates'
 import { useConfigStore } from '../stores/config'
 import { useI18n } from '../utils/i18n'
@@ -165,15 +188,35 @@ const visible = computed({
 const loading = ref(false)
 const error = ref<string | null>(null)
 const templates = ref<OnlineTemplate[]>([])
+const allBrands = ref<string[]>([])
+const brandsByCategory = ref<Record<string, string[]>>({})
 const selectedCategory = ref<TemplateCategory>('common')
+const selectedBrand = ref<string | null>(null)
 const importingTemplates = ref(new Set<string>())
 
-// 过滤当前分类的模板
-const filteredTemplates = computed(() => {
-  return templates.value.filter((t) => t.category === selectedCategory.value)
+async function loadBrandsForCategory(category: TemplateCategory) {
+  if (!brandsByCategory.value[category]) {
+    brandsByCategory.value[category] = await fetchBrandsByCategory(category)
+  }
+}
+
+const availableBrands = computed(() => {
+  return brandsByCategory.value[selectedCategory.value] || []
 })
 
-// 加载在线模板列表
+watch(selectedCategory, (newCategory) => {
+  loadBrandsForCategory(newCategory)
+  selectedBrand.value = null
+})
+
+const filteredTemplates = computed(() => {
+  return templates.value.filter((t) => {
+    const categoryMatch = t.category === selectedCategory.value
+    const brandMatch = selectedBrand.value === null || t.brand === selectedBrand.value
+    return categoryMatch && brandMatch
+  })
+})
+
 async function loadTemplates() {
   loading.value = true
   error.value = null
@@ -182,26 +225,26 @@ async function loadTemplates() {
 
   try {
     toast(t('templates.online.toasts.fetching_list'))
-    const onlineTemplates = await fetchOnlineTemplates()
+    const result: OnlineTemplatesResult = await fetchOnlineTemplates()
 
-    toast(t('templates.online.toasts.got_templates', { count: onlineTemplates.length }))
+    toast(t('templates.online.toasts.got_templates', { count: result.templates.length }))
 
-    if (onlineTemplates.length === 0) {
+    if (result.templates.length === 0) {
       error.value = t('templates.online.errors.no_templates')
       toast(t('templates.online.toasts.no_templates_toast'))
       return
     }
 
-    // 先显示模板列表（不等待下载）
-    templates.value = onlineTemplates
+    templates.value = result.templates
+    allBrands.value = result.brands
+    await loadBrandsForCategory(selectedCategory.value)
     toast(t('templates.online.toasts.list_loaded'))
 
-    // 后台异步下载模板内容
     let successCount = 0
     let failCount = 0
 
     Promise.all(
-      onlineTemplates.map(async (t, index) => {
+      result.templates.map(async (t, index) => {
         try {
           const template = await downloadTemplate(t)
           if (template) {
@@ -325,6 +368,37 @@ watch(
   border-color: var(--primary);
 }
 
+.brand-filter {
+  display: flex;
+  gap: 0.5rem;
+  padding-bottom: 0.75rem;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}
+
+.brand-tab {
+  padding: 0.375rem 0.75rem;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.brand-tab:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.brand-tab.active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
 .loading-state,
 .error-state {
   display: flex;
@@ -381,8 +455,7 @@ watch(
 
 .template-header {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+  flex-direction: column;
   gap: 0.5rem;
 }
 
@@ -391,16 +464,32 @@ watch(
   font-weight: 600;
   color: var(--text);
   margin: 0;
-  flex: 1;
+  order: 1;
 }
 
 .template-category {
+  order: 2;
+}
+
+.template-brand {
+  order: 3;
+}
+
+.template-tags {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.template-category,
+.template-brand {
   padding: 0.25rem 0.5rem;
   background: var(--primary);
   color: white;
   font-size: 0.75rem;
   border-radius: 0.25rem;
   white-space: nowrap;
+  align-self: flex-start;
 }
 
 .template-info {

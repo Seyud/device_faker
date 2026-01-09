@@ -111,6 +111,7 @@ export const messages = {
         resetprop: 'resetprop (Resetprop)',
       },
       categories: {
+        all: '全部',
         common: '通用设备',
         gaming: '游戏设备',
         transcend: '破限设备',
@@ -368,6 +369,7 @@ export const messages = {
         resetprop: 'resetprop (Resetprop)',
       },
       categories: {
+        all: 'All',
         common: 'Common',
         gaming: 'Gaming',
         transcend: 'Transcend',
