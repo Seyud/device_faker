@@ -6,12 +6,12 @@ authors = ["Seyud"]
 
 [dependencies]
 anyhow = { version = "1.0.100", default-features = false }
-jni = { version = "0.21", default-features = false }
+jni = { version = "0.21.1", default-features = false }
 log = { version = "^0.4", default-features = false }
-serde = { version = "1.0", default-features = false, features = ["derive"] }
-toml = { version = "0.8", default-features = false, features = ["parse"] }
+serde = { version = "1.0.197", default-features = false, features = ["derive"] }
+toml = { version = "0.8.19", default-features = false, features = ["parse"] }
 zygisk-api = { git = "https://github.com/Seyud/zygisk-api-rs.git" }
-serde_json = "1.0"
+serde_json = "1.0.133"
 libc = "0.2"
 
 [lib]
@@ -19,7 +19,7 @@ name = "zygisk"
 crate-type = ["cdylib"]
 
 [target.'cfg(target_os = "android")'.dependencies]
-android_logger = "^0.15"
+android_logger = "^0.15.1"
 
 [profile.release]
 panic = "abort"
