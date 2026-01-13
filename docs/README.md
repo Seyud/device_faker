@@ -38,6 +38,14 @@ Device Faker 提供了现代化的 Web 管理界面，可以通过WebUI-X API访
 
 配置文件位于 `/data/adb/device_faker/config/config.toml`，使用 TOML 格式。修改配置后仅需重启对应应用即可生效，无需重启系统。
 
+## 模板配置贡献 🎁
+
+感谢社区成员的贡献，你也可以参与！Device Faker 配置仓库：
+
+- 📦 [device_faker_config](https://github.com/Seyud/device_faker_config) - 贡献机型模板配置
+
+贡献设备配置，帮助更多用户获得更好的机型伪装效果！
+
 ## 致谢 🙏
 
 本项目在开发过程中参考了以下优秀项目：
@@ -52,4 +60,4 @@ Device Faker 提供了现代化的 Web 管理界面，可以通过WebUI-X API访
 
 **📱 让设备不为应用的机型限制所困！** 🚀
 
-> 💝 如果这个模块对你有帮助，可以给个 Star 支持一下
+> 💝 如果这个模块对你有帮助，可以给个 ⭐ Star 支持一下

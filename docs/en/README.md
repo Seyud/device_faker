@@ -37,6 +37,14 @@ For detailed configuration instructions, please refer to the [Configuration Docu
 
 The configuration file is located at `/data/adb/device_faker/config/config.toml` and uses TOML format. After modifying the configuration, just restart the corresponding application to take effect, no need to restart the system.
 
+## Template Configuration Contribution 🎁
+
+Thanks to community contributions! You can also participate! Device Faker configuration repository:
+
+- 📦 [device_faker_config](https://github.com/Seyud/device_faker_config) - Contribute device template configurations
+
+Contribute device configurations to help more users get better device spoofing results!
+
 ## Acknowledgments 🙏
 
 This project references the following excellent projects during development:
@@ -51,4 +59,4 @@ Thanks to the developers of these projects! 💖
 
 **📱 Let devices not be limited by application model restrictions!** 🚀
 
-> 💝 If this module helps you, please give it a Star for support
+> 💝 If this module helps you, please give it a ⭐ Star for support
