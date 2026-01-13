@@ -11,7 +11,7 @@ use companion::{
     spoof_system_props_via_companion,
 };
 use config::{Config, MergedAppConfig};
-use hooks::{hook_build_fields, hook_system_properties};
+use hooks::{hook_build_fields, hook_native_property_get, hook_system_properties};
 use jni::JNIEnv;
 use log::{LevelFilter, error, info};
 use state::{FAKE_PROPS, IS_FULL_MODE};
@@ -210,6 +210,7 @@ impl MyModule {
         *FAKE_PROPS.lock().unwrap() = Some(prop_map);
         *IS_FULL_MODE.lock().unwrap() = true;
         hook_system_properties(api, env)?;
+        hook_native_property_get(api)?;
 
         if debug {
             info!("SystemProperties hooked successfully, module will stay loaded");
@@ -228,7 +229,7 @@ impl MyModule {
             info!("Resetprop mode: using companion process");
         }
 
-        let prop_map = Config::build_merged_property_map(merged);
+        let prop_map = Config::build_merged_property_map_for_resetprop(merged);
         spoof_system_props_via_companion(api, &prop_map, package_name)?;
 
         if debug {

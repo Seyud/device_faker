@@ -3,10 +3,15 @@ use jni::JNIEnv;
 use jni::objects::{JClass, JString, JValue};
 use jni::strings::JNIStr;
 use jni::sys::JNINativeMethod;
+use std::ffi::{CStr, CString};
+use zygisk_api::api::{V4, ZygiskApi};
 
 use crate::config::MergedAppConfig;
 use crate::state::{FAKE_PROPS, ORIGINAL_NATIVE_GET, OriginalNativeGet};
-use zygisk_api::api::{V4, ZygiskApi};
+
+static mut ORIGINAL_SYSTEM_PROPERTY_GET: Option<
+    unsafe extern "C" fn(*const libc::c_char, *mut libc::c_char) -> libc::c_int,
+> = None;
 
 /// 根据合并配置 Hook android.os.Build 的静态字段。
 pub fn hook_build_fields(env: &mut JNIEnv, merged_config: &MergedAppConfig) -> anyhow::Result<()> {
@@ -138,4 +143,66 @@ pub unsafe extern "C" fn native_get_hook(
     }
 
     def
+}
+
+unsafe extern "C" fn my_system_property_get(
+    name: *const libc::c_char,
+    value: *mut libc::c_char,
+) -> libc::c_int {
+    if name.is_null() || value.is_null() {
+        return 0;
+    }
+
+    let name_str = match unsafe { CStr::from_ptr(name).to_str() } {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+
+    let result = {
+        let fake_props = FAKE_PROPS.lock().unwrap();
+        if let Some(props) = fake_props.as_ref() {
+            props.get(name_str).map(|fake_value| {
+                let len = std::cmp::min(fake_value.len(), 91);
+                unsafe {
+                    std::ptr::copy(fake_value.as_ptr() as *const libc::c_char, value, len);
+                    value.add(len).write(b'\0');
+                }
+                len as libc::c_int
+            })
+        } else {
+            None
+        }
+    };
+
+    if let Some(len) = result {
+        return len;
+    }
+
+    unsafe {
+        if let Some(orig_fn) = ORIGINAL_SYSTEM_PROPERTY_GET {
+            return orig_fn(name, value);
+        }
+    }
+
+    0
+}
+
+pub fn hook_native_property_get(api: &mut ZygiskApi<V4>) -> anyhow::Result<()> {
+    let symbol = CString::new("__system_property_get").unwrap();
+    #[allow(clippy::missing_transmute_annotations)]
+    unsafe {
+        let mut original: *const () = std::ptr::null();
+        api.plt_hook_register(
+            0,
+            0,
+            &symbol,
+            my_system_property_get as *const (),
+            &mut original,
+        );
+        let _ = api.plt_hook_commit();
+
+        ORIGINAL_SYSTEM_PROPERTY_GET = Some(std::mem::transmute(original));
+    }
+
+    Ok(())
 }

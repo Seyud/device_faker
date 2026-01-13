@@ -78,7 +78,7 @@ packages = [ "com.tencent.tmgp.cf" ]
 # QQ 平板模式配置
 #[[apps]]
 #package = "com.tencent.mobileqq"
-#mode = "resetprop"
+#mode = "full"
 #characteristics = "tablet"
 #manufacturer = "Xiaomi"
 #brand = "Xiaomi"
@@ -208,11 +208,12 @@ manufacturer = "vivo"
 # 【字段生效范围】⚠️
 # lite 模式（默认）：
 #   ✅ manufacturer, brand, model, device, product, fingerprint
-#   ❌ name, marketname（仅 full 模式生效，影响 SystemProperties）
+#   ❌ name, marketname, characteristics（仅 full 模式生效）
 #
 # full 模式：
 #   ✅ 所有字段都生效
 #   ⭐ name 字段会同时伪装 ro.product.name 和 ro.product.device
+#   ⭐ characteristics 在 native 层伪装
 # 
 # 【模式说明】
 # 
@@ -220,8 +221,8 @@ manufacturer = "vivo"
 # │   模式   │  Build类   │ Properties   │  可卸载    │   隐蔽性     │
 # ├──────────┼────────────┼──────────────┼────────────┼──────────────┤
 # │  lite ⭐ │     ✅     │      ❌      │     ✅     │  ⭐⭐⭐⭐⭐  │
-# │  full    │     ✅     │      ✅      │     ❌     │  ⭐⭐⭐      │
-# │ resetprop│     ✅     │      ✅      │     ❌     │  ⭐⭐        │
+# │  full    │     ✅     │      ✅      │     ❌     │  ⭐⭐⭐⭐      │
+# │ resetprop│     ✅     │      ✅      │     ❌     │  ⭐⭐⭐        │
 # └──────────┴────────────┴──────────────┴────────────┴──────────────┘
 # 
 # 【lite 模式】（默认，推荐）⭐
@@ -235,17 +236,15 @@ manufacturer = "vivo"
 # 【full 模式】（按需使用）
 # - 修改 Build 类 + 伪装 SystemProperties.native_get
 # - 模块保持加载状态，驻留内存
-# - ✅ 优点：完整伪装，拦截所有属性查询
+# - ✅ 优点：完整伪装，拦截所有属性查询（包括 native 层）
 # - ⚠️ 缺点：模块驻留内存，可能被某些应用检测到
-# - ⚠️ 注意：仅在 lite 模式不够用时才使用
 # - 适用场景：需要完全伪装 SystemProperties 的特殊应用
 #
 # 【resetprop 模式】
 # - 使用 resetprop 工具修改系统属性
-# - ✅ 优点：可以修改只读属性（如 ro.build.characteristics）
-# - 适用场景：QQ 平板模式伪装（需修改 characteristics）
+# - ✅ 优点：可以修改只读属性
 # 
 # 推荐策略：
 # 1. 默认所有应用使用 lite 模式（不设置 mode 字段）
 # 2. 只有当某个应用在 lite 模式下仍能检测到真实机型时，才为其单独设置 mode = "full"
-# 3. 这样可以最大化隐蔽性，同时保留必要的完整伪装能力
+# 3. 需要伪装 characteristics 的应用使用 full 模式

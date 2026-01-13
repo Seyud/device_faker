@@ -216,6 +216,16 @@ impl Config {
 
         map
     }
+
+    /// 构建用于 resetprop 模式的系统属性映射（排除 characteristics）
+    /// resetprop 模式暂时不支持 characteristics
+    pub fn build_merged_property_map_for_resetprop(
+        merged: &MergedAppConfig,
+    ) -> HashMap<String, String> {
+        let mut map = Self::build_merged_property_map(merged);
+        map.remove("ro.build.characteristics");
+        map
+    }
 }
 
 /// 合并后的应用配置（模板 + 直接配置）

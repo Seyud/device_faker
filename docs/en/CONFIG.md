@@ -11,7 +11,6 @@ The configuration file uses TOML format.
 
 ```toml
 default_mode = "lite"  # Recommended: lightweight mode (better stealth)
-# default_mode = "full"  # Full mode (may be detected)
 ```
 
 **Available values**:
@@ -167,7 +166,7 @@ model = "SM-S9280"
 | `fingerprint` | `Build.FINGERPRINT` | + `ro.build.fingerprint` | Fingerprint |
 | `name` | ❌ | `ro.product.name` + `ro.product.device` | Code name (e.g.: xuanyuan) |
 | `marketname` | ❌ | `ro.product.marketname` | Model name (e.g.: REDMI K90 Pro Max) |
-| `characteristics` | ❌ | `ro.build.characteristics` | Characteristics (e.g.: tablet) - only effective in resetprop mode |
+| `characteristics` | ❌ | `ro.build.characteristics` | Characteristics (e.g.: tablet) - only effective in **full mode** |
 | `force_denylist_unmount` | N/A | N/A | Whether to force-unmount module mount points for this app; falls back to `default_force_denylist_unmount` when unspecified |
 
 **Configuration Metadata Fields** (display only, does not affect spoofing):
@@ -189,7 +188,7 @@ model = "SM-S9280"
 - Fields in [[apps]] will override template configuration
 - `name` and `marketname` are only effective in **full mode** (affect SystemProperties)
 - `name` field in full mode will simultaneously spoof `ro.product.name` and `ro.product.device`
-- `characteristics` field is only effective in **resetprop mode**
+- `characteristics` field is only effective in **full mode**
 - In **lite mode**, only `manufacturer`, `brand`, `model`, `device`, `product`, `fingerprint` take effect
 
 ## Mode Comparison
@@ -198,19 +197,14 @@ model = "SM-S9280"
 |---------|-------------|-----------|----------------|
 | Build Class Spoofing | ✅ | ✅ | ✅ |
 | SystemProperties Spoofing | ❌ | ✅ | ✅ |
+| characteristics Spoofing | ❌ | ✅ | ❌ |
 | Read-only Property Modification | ❌ | ❌ | ✅ |
 | Module Unloadable | ✅ | ❌ | ❌ |
-| Stealth | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ |
+| Stealth | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ |
 | Detection Risk | Very Low | Relatively Low | Relatively Low |
-| Recommendation | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ |
+| Recommendation | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ |
 
 ## How to Choose a Mode?
-
-### Recommended Strategy
-
-1. **Default to lite mode** - Covers 90% of scenarios
-2. **Test the application** - See if it works normally
-3. **If not** - Switch to full mode
 
 ### Judgment Criteria
 
@@ -222,7 +216,7 @@ model = "SM-S9280"
 **Use full mode**:
 - Application reads SystemProperties
 - Can still detect real device model in lite mode
-- Don't mind being detected by the module
+- Need to spoof characteristics (e.g., QQ tablet mode)
 
 **Use resetprop mode**:
-- Need to modify `ro.build.characteristics` (such as QQ tablet mode)
+- Need to modify read-only properties
