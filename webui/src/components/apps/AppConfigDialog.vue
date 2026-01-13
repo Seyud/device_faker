@@ -111,8 +111,8 @@
 
         <el-form-item
           v-if="
-            customFormData.mode === 'resetprop' ||
-            (!customFormData.mode && configStore.config.default_mode === 'resetprop')
+            customFormData.mode === 'full' ||
+            (!customFormData.mode && configStore.config.default_mode === 'full')
           "
           :label="t('templates.fields.characteristics')"
         >

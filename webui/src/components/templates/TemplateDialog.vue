@@ -80,8 +80,7 @@
 
       <el-form-item
         v-if="
-          formData.mode === 'resetprop' ||
-          (!formData.mode && configStore.config.default_mode === 'resetprop')
+          formData.mode === 'full' || (!formData.mode && configStore.config.default_mode === 'full')
         "
         :label="t('templates.fields.characteristics')"
       >
