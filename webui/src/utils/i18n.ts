@@ -227,18 +227,11 @@ export const messages = {
         title: '工具',
         convert: {
           label: '配置转换',
-          desc: '将 system.prop 转换为机型模板',
+          desc: '将 system.prop 机型伪装模块转换为机型模板',
           btn: '开始转换',
         },
       },
       dialog: {
-        convert: {
-          title: '配置转换',
-          path_label: 'system.prop 文件路径',
-          path_placeholder: '请输入 system.prop 文件的绝对路径',
-          default_path_tip: '默认路径: /data/adb/device_faker/config/system.prop',
-          btn_start: '开始转换',
-        },
         result: {
           title: '转换结果',
           template_name_label: '模板名称',
@@ -251,7 +244,6 @@ export const messages = {
         default_mode_updated: '默认模式已更新',
         debug_enabled: '调试模式已启用',
         debug_disabled: '调试模式已关闭',
-        input_path: '请输入文件路径',
         read_failed: '读取文件失败或文件为空',
         convert_failed: '转换失败',
         save_failed: '保存失败',
@@ -485,18 +477,11 @@ export const messages = {
         title: 'Tools',
         convert: {
           label: 'Config Conversion',
-          desc: 'Convert system.prop to device template',
+          desc: 'Convert system.prop-based spoof module into a device template',
           btn: 'Start Conversion',
         },
       },
       dialog: {
-        convert: {
-          title: 'Config Conversion',
-          path_label: 'system.prop File Path',
-          path_placeholder: 'Enter absolute path of system.prop',
-          default_path_tip: 'Default Path: /data/adb/device_faker/config/system.prop',
-          btn_start: 'Start Conversion',
-        },
         result: {
           title: 'Conversion Result',
           template_name_label: 'Template Name',
@@ -509,7 +494,6 @@ export const messages = {
         default_mode_updated: 'Default mode updated',
         debug_enabled: 'Debug mode enabled',
         debug_disabled: 'Debug mode disabled',
-        input_path: 'Please enter file path',
         read_failed: 'Failed to read file or file is empty',
         convert_failed: 'Conversion failed',
         save_failed: 'Save failed',

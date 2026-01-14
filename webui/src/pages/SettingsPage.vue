@@ -113,41 +113,11 @@
             <p class="setting-desc">{{ t('settings.tools.convert.desc') }}</p>
           </div>
         </div>
-        <el-button type="primary" @click="showInputDialog">{{
-          t('settings.tools.convert.btn')
-        }}</el-button>
+        <el-button type="primary" :loading="converting" @click="startConversion">
+          {{ t('settings.tools.convert.btn') }}
+        </el-button>
       </div>
     </div>
-
-    <!-- 转换路径输入对话框 -->
-    <el-dialog
-      v-model="inputDialogVisible"
-      :title="t('settings.dialog.convert.title')"
-      width="90%"
-      :close-on-click-modal="false"
-      :append-to-body="true"
-      class="template-dialog"
-      modal-class="template-dialog-modal"
-    >
-      <el-form label-position="top">
-        <el-form-item :label="t('settings.dialog.convert.path_label')">
-          <el-input
-            v-model="convertPath"
-            :placeholder="t('settings.dialog.convert.path_placeholder')"
-            type="textarea"
-            :autosize="{ minRows: 2, maxRows: 2 }"
-            @keyup.enter="startConversion"
-          />
-          <div class="form-tip">{{ t('settings.dialog.convert.default_path_tip') }}</div>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="inputDialogVisible = false">{{ t('common.cancel') }}</el-button>
-        <el-button type="primary" :loading="converting" @click="startConversion">
-          {{ t('settings.dialog.convert.btn_start') }}
-        </el-button>
-      </template>
-    </el-dialog>
 
     <!-- 转换结果对话框 -->
     <el-dialog
@@ -191,7 +161,7 @@ import { ref, watch, onActivated } from 'vue'
 import { Moon, Globe, Settings, Bug, FileUp, Shield } from 'lucide-vue-next'
 import { useConfigStore } from '../stores/config'
 import { useSettingsStore } from '../stores/settings'
-import { writeFile, execCommand, readFile } from '../utils/ksu'
+import { execCommand, readFile } from '../utils/ksu'
 import { parse as parseToml } from 'smol-toml'
 import { useI18n } from '../utils/i18n'
 import { toast } from 'kernelsu-alt'
@@ -207,13 +177,13 @@ const defaultMode = ref(configStore.config.default_mode || 'lite')
 const defaultForceDenylistUnmount = ref(configStore.config.default_force_denylist_unmount || false)
 const debugMode = ref(configStore.config.debug || false)
 
-const convertPath = ref('/data/adb/device_faker/config/system.prop')
-const inputDialogVisible = ref(false)
 const convertDialogVisible = ref(false)
 const converting = ref(false)
 const convertedTemplate = ref<Template | null>(null)
 const convertedTemplateName = ref('')
 const convertedContent = ref('')
+const cliPath = '/data/adb/modules/device_faker/bin/device_faker_cli'
+const maxChunkSize = 96 * 1024
 
 function onThemeChange(value: string) {
   settingsStore.setTheme(value as 'system' | 'light' | 'dark')
@@ -253,110 +223,195 @@ async function onDebugChange(value: boolean) {
   }
 }
 
-function showInputDialog() {
-  inputDialogVisible.value = true
+function fileToBase64(chunk: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result as string
+      resolve(result.split(',')[1] || '')
+    }
+    reader.onerror = (err) => reject(err)
+    reader.readAsDataURL(chunk)
+  })
+}
+
+function pickZipFile(): Promise<File | null> {
+  return new Promise((resolve) => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.zip'
+    input.onchange = (event) => {
+      const target = event.target as HTMLInputElement
+      const file = target.files?.[0] || null
+      resolve(file)
+    }
+    input.click()
+  })
+}
+
+function escapeShellPath(path: string): string {
+  return path.replace(/'/g, "'\\''")
+}
+
+async function uploadZipToDevice(file: File, targetPath: string) {
+  const dirEnd = targetPath.lastIndexOf('/')
+  const targetDir = dirEnd > 0 ? targetPath.slice(0, dirEnd) : '/data/local/tmp'
+  await execCommand(`mkdir -p "${targetDir}"`)
+
+  const chunkSize =
+    file.size > maxChunkSize * 4 ? maxChunkSize : Math.max(4096, Math.ceil(file.size / 4))
+  const totalChunks = Math.ceil((file.size || 1) / chunkSize)
+  try {
+    for (let index = 0; index < totalChunks; index++) {
+      const start = index * chunkSize
+      const end = Math.min(start + chunkSize, file.size)
+      const chunk = file.slice(start, end)
+      const base64 = await fileToBase64(chunk)
+      const partPath = `${targetPath}.part${index.toString().padStart(8, '0')}`
+      await execCommand(`echo '${base64}' | base64 -d > "${partPath}"`)
+    }
+
+    await execCommand(`cat "${targetPath}".part* > "${targetPath}" && rm -f "${targetPath}".part*`)
+  } catch (err) {
+    await execCommand(`rm -f "${targetPath}" "${targetPath}".part*`).catch(() => {})
+    throw err
+  }
+}
+
+async function fallbackZipConversion(zipPath: string, outputPath: string) {
+  const extractDir = `${zipPath}.extract`
+  try {
+    await execCommand(`rm -rf "${extractDir}" && mkdir -p "${extractDir}"`)
+    await execCommand(`cd "${extractDir}" && unzip -o "${zipPath}"`)
+
+    const systemPropRelative = await execCommand(
+      `cd "${extractDir}" && find . -type f -name 'system.prop' -print -quit`
+    )
+    const cleaned = systemPropRelative.trim()
+    if (!cleaned) {
+      throw new Error('system.prop not found in ZIP archive')
+    }
+
+    const normalized = cleaned.startsWith('/')
+      ? cleaned
+      : `${extractDir}/${cleaned.replace(/^\.\//, '')}`
+
+    await execCommand(
+      `${cliPath} convert -i '${escapeShellPath(normalized)}' -o '${escapeShellPath(outputPath)}'`
+    )
+  } finally {
+    await execCommand(`rm -rf "${extractDir}"`).catch(() => {})
+  }
+}
+
+async function convertZipOnDevice(zipPath: string, outputPath: string) {
+  try {
+    await execCommand(
+      `${cliPath} convert-zip -i '${escapeShellPath(zipPath)}' -o '${escapeShellPath(outputPath)}'`
+    )
+  } catch {
+    await fallbackZipConversion(zipPath, outputPath)
+  }
+}
+
+function parseTemplateFromToml(outputContent: string): {
+  templateData: Template
+  defaultName: string
+} {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let parsed: any
+  try {
+    parsed = parseToml(outputContent)
+  } catch {
+    throw new Error('Invalid TOML output from CLI')
+  }
+
+  let templateData: Template | null = null
+  let defaultName = 'imported_template'
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const isTemplate = (obj: any): boolean => {
+    return obj && typeof obj === 'object' && (obj.manufacturer || obj.model || obj.brand)
+  }
+
+  if (isTemplate(parsed)) {
+    templateData = parsed as Template
+  } else if (parsed.templates && typeof parsed.templates === 'object') {
+    for (const key of Object.keys(parsed.templates)) {
+      const val = parsed.templates[key]
+      if (isTemplate(val)) {
+        defaultName = key
+        templateData = val
+        break
+      }
+      if (val && typeof val === 'object') {
+        for (const subKey of Object.keys(val)) {
+          const subVal = val[subKey]
+          if (isTemplate(subVal)) {
+            defaultName = subKey
+            templateData = subVal
+            break
+          }
+        }
+      }
+      if (templateData) break
+    }
+  } else {
+    for (const key of Object.keys(parsed)) {
+      const val = parsed[key]
+      if (isTemplate(val)) {
+        defaultName = key
+        templateData = val
+        break
+      }
+    }
+  }
+
+  if (!templateData) {
+    throw new Error('Could not find valid template data in CLI output')
+  }
+
+  return { templateData, defaultName }
 }
 
 async function startConversion() {
-  if (!convertPath.value) {
-    toast(t('settings.messages.input_path'))
+  if (converting.value) return
+
+  if (import.meta.env?.DEV) {
+    const { mockConfig } = await import('../utils/mockData')
+    const { templateData, defaultName } = parseTemplateFromToml(mockConfig)
+    convertedTemplate.value = templateData
+    convertedTemplateName.value = defaultName
+    convertedContent.value = mockConfig
+    convertDialogVisible.value = true
+    return
+  }
+
+  const file = await pickZipFile()
+  if (!file) {
     return
   }
 
   converting.value = true
+  const timestamp = Date.now()
+  const tempZipPath = `/data/local/tmp/device_faker_convert_${timestamp}.zip`
+  const tempOutputPath = `/data/local/tmp/device_faker_convert_${timestamp}.toml`
+
   try {
-    const content = await readFile(convertPath.value)
-    if (!content) {
+    await uploadZipToDevice(file, tempZipPath)
+    await convertZipOnDevice(tempZipPath, tempOutputPath)
+
+    const outputContent = await readFile(tempOutputPath)
+    if (!outputContent) {
       toast(t('settings.messages.read_failed'))
       return
     }
 
-    const tempInputPath = '/data/local/tmp/device_faker_convert_input.prop'
-    const tempOutputPath = '/data/local/tmp/device_faker_convert_output.toml'
-    const cliPath = '/data/adb/modules/device_faker/bin/device_faker_cli'
-
-    // 1. Write content to temp file
-    await writeFile(tempInputPath, content)
-
-    // 2. Run conversion CLI
-    await execCommand(`${cliPath} convert -i ${tempInputPath} -o ${tempOutputPath}`)
-
-    // 3. Read output
-    const outputContent = await readFile(tempOutputPath)
-
-    // 4. Parse TOML
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let parsed: any
-    try {
-      parsed = parseToml(outputContent)
-    } catch {
-      throw new Error('Invalid TOML output from CLI')
-    }
-
-    let templateData: Template | null = null
-    let defaultName = 'imported_template'
-
-    // Helper to check if an object looks like a template
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const isTemplate = (obj: any): boolean => {
-      return obj && typeof obj === 'object' && (obj.manufacturer || obj.model || obj.brand)
-    }
-
-    // 1. Check if parsed object itself is a template (flat format)
-    if (isTemplate(parsed)) {
-      templateData = parsed as Template
-    }
-    // 2. Check if parsed has 'templates' and look inside
-    else if (parsed.templates && typeof parsed.templates === 'object') {
-      // Try to find a template in parsed.templates
-      // This handles [templates."Name"]
-      for (const key of Object.keys(parsed.templates)) {
-        const val = parsed.templates[key]
-        if (isTemplate(val)) {
-          defaultName = key
-          templateData = val
-          break
-        }
-        // Handle double nesting [templates.templates."Name"]
-        if (val && typeof val === 'object') {
-          for (const subKey of Object.keys(val)) {
-            const subVal = val[subKey]
-            if (isTemplate(subVal)) {
-              defaultName = subKey
-              templateData = subVal
-              break
-            }
-          }
-        }
-        if (templateData) break
-      }
-    }
-    // 3. Generic search in top-level keys
-    else {
-      for (const key of Object.keys(parsed)) {
-        const val = parsed[key]
-        if (isTemplate(val)) {
-          defaultName = key
-          templateData = val
-          break
-        }
-      }
-    }
-
-    if (!templateData) {
-      throw new Error('Could not find valid template data in CLI output')
-    }
-
+    const { templateData, defaultName } = parseTemplateFromToml(outputContent)
     convertedTemplate.value = templateData
     convertedTemplateName.value = defaultName
     convertedContent.value = outputContent
-
-    // Close input dialog and show result dialog
-    inputDialogVisible.value = false
     convertDialogVisible.value = true
-
-    // Cleanup
-    await execCommand(`rm ${tempInputPath} ${tempOutputPath}`)
   } catch (err) {
     toast(
       `${t('settings.messages.convert_failed')}: ${err instanceof Error ? err.message : String(err)}`
@@ -364,6 +419,7 @@ async function startConversion() {
     console.error(err)
   } finally {
     converting.value = false
+    await execCommand(`rm -f "${tempZipPath}" "${tempOutputPath}"`).catch(() => {})
   }
 }
 

@@ -1,6 +1,10 @@
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use std::collections::HashMap;
-use std::fs;
+use std::fs::{self, File};
+use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
+use walkdir::WalkDir;
+use zip::ZipArchive;
 
 /// Convert configuration from system.prop format to config.toml
 pub fn convert_config(input: &str, output: &str) -> Result<()> {
@@ -72,4 +76,89 @@ pub fn convert_config(input: &str, output: &str) -> Result<()> {
     println!("Conversion complete.");
 
     Ok(())
+}
+
+fn create_temp_dir() -> Result<PathBuf> {
+    let base = std::env::temp_dir();
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let dir = base.join(format!("device_faker_cli_{}", nanos));
+    fs::create_dir_all(&dir).context("Failed to create temporary directory")?;
+    Ok(dir)
+}
+
+fn cleanup_dir(path: &Path) {
+    if let Err(err) = fs::remove_dir_all(path) {
+        eprintln!(
+            "Warning: failed to clean temp dir {}: {}",
+            path.display(),
+            err
+        );
+    }
+}
+
+fn extract_zip_to_dir(zip_path: &str, dest: &Path) -> Result<()> {
+    let zip_file = File::open(zip_path).context("Failed to open ZIP file")?;
+    let mut archive = ZipArchive::new(zip_file).context("Failed to read ZIP archive")?;
+
+    for i in 0..archive.len() {
+        let mut entry = archive.by_index(i).context("Failed to read ZIP entry")?;
+        let Some(rel_path) = entry.enclosed_name().map(|p| p.to_owned()) else {
+            continue;
+        };
+
+        let out_path = dest.join(rel_path);
+        if entry.name().ends_with('/') {
+            fs::create_dir_all(&out_path).context("Failed to create directory from ZIP")?;
+            continue;
+        }
+
+        if let Some(parent) = out_path.parent() {
+            fs::create_dir_all(parent).context("Failed to create parent directory")?;
+        }
+
+        let mut outfile = File::create(&out_path).context("Failed to create extracted file")?;
+        std::io::copy(&mut entry, &mut outfile).context("Failed to write extracted file")?;
+    }
+
+    Ok(())
+}
+
+fn find_system_prop(root: &Path) -> Result<PathBuf> {
+    for entry in WalkDir::new(root).into_iter().filter_map(|e| e.ok()) {
+        if entry.file_type().is_file()
+            && entry
+                .file_name()
+                .to_string_lossy()
+                .eq_ignore_ascii_case("system.prop")
+        {
+            return Ok(entry.into_path());
+        }
+    }
+
+    Err(anyhow!("system.prop not found in ZIP archive"))
+}
+
+/// Extract a ZIP archive, locate system.prop, and convert it to TOML output.
+pub fn convert_zip_config(input_zip: &str, output: &str) -> Result<()> {
+    println!("Converting config from ZIP {} to {}", input_zip, output);
+
+    let temp_dir = create_temp_dir()?;
+
+    let result = (|| -> Result<()> {
+        extract_zip_to_dir(input_zip, &temp_dir)?;
+        let system_prop_path = find_system_prop(&temp_dir)?;
+        let system_prop_str = system_prop_path
+            .to_str()
+            .ok_or_else(|| anyhow!("Invalid system.prop path"))?
+            .to_string();
+
+        convert_config(&system_prop_str, output)?;
+        Ok(())
+    })();
+
+    cleanup_dir(&temp_dir);
+    result
 }
