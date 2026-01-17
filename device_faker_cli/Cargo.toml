@@ -8,8 +8,6 @@ authors = ["Seyud"]
 anyhow = { version = "1.0.100", default-features = false }
 argh = "0.1"
 minreq = { version = "2.12.0", default-features = false, features = ["https-rustls", "json-using-serde"] }
-serde = { version = "1.0.197", default-features = false, features = ["derive"] }
-serde_json = { version = "1.0.133", default-features = false }
 toml = { version = "0.8.19", default-features = false, features = ["parse"] }
 walkdir = "2.5.0"
 zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
