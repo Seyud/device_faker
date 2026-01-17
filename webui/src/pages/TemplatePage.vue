@@ -4,9 +4,15 @@
       :locale="locale"
       @open-online="showOnlineDialog"
       @open-create="showCreateDialog"
+      @search="handleSearch"
     />
 
-    <TemplateList :templates="templates" @edit="handleEdit" @delete="deleteTemplateConfirm" />
+    <TemplateList
+      :templates="filteredTemplates"
+      :is-searching="searchQuery.length > 0"
+      @edit="handleEdit"
+      @delete="deleteTemplateConfirm"
+    />
 
     <TemplateDialog
       v-model="dialogVisible"
@@ -39,7 +45,43 @@ const appsStore = useAppsStore()
 const { t, locale } = useI18n()
 const getMessageBox = useLazyMessageBox()
 
-const templates = computed(() => configStore.getTemplates())
+const searchQuery = ref('')
+
+const allTemplates = computed(() => configStore.getTemplates())
+
+const filteredTemplates = computed(() => {
+  if (!searchQuery.value.trim()) {
+    return allTemplates.value
+  }
+
+  const query = searchQuery.value.toLowerCase().trim()
+
+  return Object.entries(allTemplates.value).reduce<Record<string, Template>>(
+    (acc, [name, template]) => {
+      const searchFields = [
+        name,
+        template.brand || '',
+        template.model || '',
+        template.device || '',
+        template.manufacturer || '',
+        template.product || '',
+      ]
+
+      const matches = searchFields.some((field) => field.toLowerCase().includes(query))
+
+      if (matches) {
+        acc[name] = template
+      }
+
+      return acc
+    },
+    {}
+  )
+})
+
+function handleSearch(query: string) {
+  searchQuery.value = query
+}
 
 const dialogVisible = ref(false)
 const onlineDialogVisible = ref(false)

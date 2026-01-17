@@ -11,8 +11,9 @@
 
     <div v-if="Object.keys(templates).length === 0" class="empty-state">
       <FileText :size="64" class="empty-icon" />
-      <p class="empty-text">{{ t('templates.empty.title') }}</p>
-      <p class="empty-hint">{{ t('templates.empty.hint') }}</p>
+      <p class="empty-text">{{ emptyText }}</p>
+      <p v-if="isSearching" class="empty-hint">{{ t('templates.search.no_results') }}</p>
+      <p v-else class="empty-hint">{{ t('templates.empty.hint') }}</p>
     </div>
   </div>
 </template>
@@ -24,12 +25,19 @@ import TemplateCard from './TemplateCard.vue'
 import { useI18n } from '../../utils/i18n'
 import type { Template } from '../../types'
 
-const props = defineProps<{ templates: Record<string, Template> }>()
+const props = defineProps<{ templates: Record<string, Template>; isSearching?: boolean }>()
 const emit = defineEmits<{ edit: [string, Template]; delete: [string] }>()
 
 const { t } = useI18n()
 
 const templates = computed(() => props.templates)
+
+const emptyText = computed(() => {
+  if (props.isSearching && Object.keys(props.templates).length === 0) {
+    return t('templates.search.no_results')
+  }
+  return t('templates.empty.title')
+})
 </script>
 
 <style scoped>

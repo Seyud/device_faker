@@ -110,6 +110,10 @@ export const messages = {
         full: 'full (完整)',
         resetprop: 'resetprop (Resetprop)',
       },
+      search: {
+        placeholder: '搜索模板名称、品牌或型号',
+        no_results: '未找到匹配的模板',
+      },
       categories: {
         all: '全部',
         common: '通用设备',
@@ -359,6 +363,10 @@ export const messages = {
         lite: 'lite (Lite)',
         full: 'full (Full)',
         resetprop: 'resetprop (Resetprop)',
+      },
+      search: {
+        placeholder: 'Search by name, brand, or model',
+        no_results: 'No matching templates found',
       },
       categories: {
         all: 'All',
