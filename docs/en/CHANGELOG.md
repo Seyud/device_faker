@@ -1,5 +1,21 @@
 # 📝 Changelog
 
+## ⬆️[v1.2.0 → v1.3.0] - 2026-01-22
+
+### 🆕 New Features
+- 📦 WebUI supports displaying configured but not installed package names
+- 🏷️ WebUI online template library added brand classification
+- 🤖 Added Android version camouflage and custom attribute features
+- 🔍 Added template search function
+- 👥 WebUI supports displaying and distinguishing multi-user package names
+
+### ⚡ Improvements
+- 🎨 Optimized WebUI styles and layout
+- ⚡ Optimized WebUI application list loading
+- 🔧 characteristics field supports full mode
+- 🔒 Optimized full mode __system_property_get function interception
+- 🔄 Refactored WebUI configuration conversion, supports direct selection
+
 ## ⬆️[v1.1.0 → v1.2.0] - 2025-12-17
 
 ### 🆕 New Features
