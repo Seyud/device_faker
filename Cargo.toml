@@ -1,5 +1,5 @@
 [workspace]
-members = ["device_faker_cli"]
+members = ["device_faker_cli", "xtask"]
 
 [package]
 name = "device_faker"
