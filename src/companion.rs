@@ -1,13 +1,17 @@
-use crate::state::{ACTIVE_RESET_SESSION, ActiveResetSession};
+use std::{
+    collections::HashMap,
+    fs,
+    io::{Read, Write},
+    os::unix::net::UnixStream,
+    thread,
+    time::Duration,
+};
+
 use log::{error, warn};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::fs;
-use std::io::{Read, Write};
-use std::os::unix::net::UnixStream;
-use std::thread;
-use std::time::Duration;
 use zygisk_api::api::{V4, ZygiskApi};
+
+use crate::state::{ACTIVE_RESET_SESSION, ActiveResetSession};
 
 pub fn spoof_system_props_via_companion(
     api: &mut ZygiskApi<V4>,

@@ -1,8 +1,11 @@
+use std::{
+    collections::HashMap,
+    fs::{self, File},
+    path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
+};
+
 use anyhow::{Context, Result, anyhow};
-use std::collections::HashMap;
-use std::fs::{self, File};
-use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 use walkdir::WalkDir;
 use zip::ZipArchive;
 

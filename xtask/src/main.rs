@@ -10,7 +10,6 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use fs_extra::{dir, file};
 use zip::{CompressionMethod, write::FileOptions};
-
 use zip_ext::zip_create_from_directory_with_options;
 
 #[derive(Parser)]

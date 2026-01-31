@@ -5,6 +5,8 @@ mod config;
 mod hooks;
 mod state;
 
+use std::{fs, path::Path};
+
 use anyhow::Context;
 use companion::{
     handle_companion_request, restore_previous_resetprop_if_needed,
@@ -15,12 +17,11 @@ use hooks::{hook_build_fields, hook_native_property_get, hook_system_properties}
 use jni::JNIEnv;
 use log::{LevelFilter, error, info};
 use state::{FAKE_PROPS, IS_FULL_MODE};
-use std::fs;
-use std::path::Path;
-use zygisk_api::ZygiskModule;
-use zygisk_api::api::v4::ZygiskOption;
-use zygisk_api::api::{V4, ZygiskApi};
-use zygisk_api::raw::ZygiskRaw;
+use zygisk_api::{
+    ZygiskModule,
+    api::{V4, ZygiskApi, v4::ZygiskOption},
+    raw::ZygiskRaw,
+};
 
 const CONFIG_PATH: &str = "/data/adb/device_faker/config/config.toml";
 

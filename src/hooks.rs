@@ -1,13 +1,18 @@
-use anyhow::Context;
-use jni::JNIEnv;
-use jni::objects::{JClass, JString, JValue};
-use jni::strings::JNIStr;
-use jni::sys::JNINativeMethod;
 use std::ffi::{CStr, CString};
+
+use anyhow::Context;
+use jni::{
+    JNIEnv,
+    objects::{JClass, JString, JValue},
+    strings::JNIStr,
+    sys::JNINativeMethod,
+};
 use zygisk_api::api::{V4, ZygiskApi};
 
-use crate::config::MergedAppConfig;
-use crate::state::{FAKE_PROPS, ORIGINAL_NATIVE_GET, OriginalNativeGet};
+use crate::{
+    config::MergedAppConfig,
+    state::{FAKE_PROPS, ORIGINAL_NATIVE_GET, OriginalNativeGet},
+};
 
 static mut ORIGINAL_SYSTEM_PROPERTY_GET: Option<
     unsafe extern "C" fn(*const libc::c_char, *mut libc::c_char) -> libc::c_int,

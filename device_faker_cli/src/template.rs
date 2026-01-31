@@ -1,5 +1,6 @@
-use anyhow::{Context, Result};
 use std::fs;
+
+use anyhow::{Context, Result};
 
 // Gitee repository configuration - raw file base URL
 const GITEE_RAW_BASE: &str = "https://gitee.com/Seyud/device_faker_config_mirror/raw/main";
