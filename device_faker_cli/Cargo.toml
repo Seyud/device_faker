@@ -11,15 +11,3 @@ minreq = { version = "2.12.0", default-features = false, features = ["https-rust
 toml = { version = "0.8.19", default-features = false, features = ["parse"] }
 walkdir = "2.5.0"
 zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
-
-[[bin]]
-name = "device_faker_cli"
-path = "src/main.rs"
-
-[profile.release]
-panic = "abort"
-lto = "fat"
-opt-level = "z"
-strip = true
-codegen-units = 1
-overflow-checks = false

@@ -1,6 +1,7 @@
+use std::collections::HashMap;
+
 use anyhow::Result;
 use serde::Deserialize;
-use std::collections::HashMap;
 
 /// 机型模板
 #[derive(Debug, Clone, Deserialize)]

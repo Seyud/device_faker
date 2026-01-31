@@ -4,7 +4,8 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - 'device_faker/**'
+      - 'src/**'
+      - "Cargo.*"
       - 'device_faker_cli/**'
       - 'module/**'
       - 'webui/**'
@@ -29,53 +30,28 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android
-
-      - name: Configure Cargo for Android
-        run: |
-          mkdir -p ~/.cargo
-          echo '[target.aarch64-linux-android]' >> ~/.cargo/config.toml
-          echo 'linker = "${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android29-clang"' >> ~/.cargo/config.toml
-
-      - name: Build device_faker
-        working-directory: device_faker
-        env:
-          CC_aarch64_linux_android: ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android29-clang
-          AR_aarch64_linux_android: ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
-          CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER: ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android29-clang
-        run: |
-          cargo build --target aarch64-linux-android --release
-          mkdir -p ../module/zygisk
-          cp target/aarch64-linux-android/release/libzygisk.so ../module/zygisk/arm64-v8a.so
-
-      - name: Install UPX
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y upx
-
-      - name: Build device_faker_cli
-        working-directory: device_faker_cli
-        env:
-          CC_aarch64_linux_android: ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android29-clang
-          AR_aarch64_linux_android: ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
-          CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER: ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android29-clang
-        run: |
-          cargo build --target aarch64-linux-android --release
-          mkdir -p ../module/bin
-          cp target/aarch64-linux-android/release/device_faker_cli ../module/bin/device_faker_cli
-          upx --best ../module/bin/device_faker_cli || true
-
+      
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 'lts/*'
           cache: 'npm'
           cache-dependency-path: webui/package-lock.json
-
-      - name: Build webui
-        working-directory: webui
+          
+      - name: Install build dependencies
         run: |
-          npm ci
-          npm run build
+          sudo apt update
+          sudo apt install -y gcc-multilib
+          cargo install cargo-ndk --locked
+
+      - name: Build device_faker
+        run: |
+          cargo run --package xtask -- build -r
+
+      - name: Install UPX
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y upx
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

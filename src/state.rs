@@ -1,5 +1,4 @@
-use std::collections::HashMap;
-use std::sync::Mutex;
+use std::{collections::HashMap, sync::Mutex};
 
 /// 用于恢复真实属性值的 native_get 原始函数签名。
 pub type OriginalNativeGet = unsafe extern "C" fn(

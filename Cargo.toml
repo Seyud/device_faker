@@ -1,3 +1,6 @@
+[workspace]
+members = ["device_faker_cli", "xtask"]
+
 [package]
 name = "device_faker"
 version = "1.3.0"
@@ -28,5 +31,3 @@ opt-level = 3
 strip = true
 codegen-units = 1
 overflow-checks = false
-
-
