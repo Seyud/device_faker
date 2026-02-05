@@ -38,7 +38,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rust-src
-          toolchain: stable
+          toolchain: nightly
           targets: aarch64-linux-android
       
       - name: Setup Node.js
