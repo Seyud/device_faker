@@ -278,40 +278,10 @@ async function uploadZipToDevice(file: File, targetPath: string) {
   }
 }
 
-async function fallbackZipConversion(zipPath: string, outputPath: string) {
-  const extractDir = `${zipPath}.extract`
-  try {
-    await execCommand(`rm -rf "${extractDir}" && mkdir -p "${extractDir}"`)
-    await execCommand(`cd "${extractDir}" && unzip -o "${zipPath}"`)
-
-    const systemPropRelative = await execCommand(
-      `cd "${extractDir}" && find . -type f -name 'system.prop' -print -quit`
-    )
-    const cleaned = systemPropRelative.trim()
-    if (!cleaned) {
-      throw new Error('system.prop not found in ZIP archive')
-    }
-
-    const normalized = cleaned.startsWith('/')
-      ? cleaned
-      : `${extractDir}/${cleaned.replace(/^\.\//, '')}`
-
-    await execCommand(
-      `${cliPath} convert -i '${escapeShellPath(normalized)}' -o '${escapeShellPath(outputPath)}'`
-    )
-  } finally {
-    await execCommand(`rm -rf "${extractDir}"`).catch(() => {})
-  }
-}
-
 async function convertZipOnDevice(zipPath: string, outputPath: string) {
-  try {
-    await execCommand(
-      `${cliPath} convert-zip -i '${escapeShellPath(zipPath)}' -o '${escapeShellPath(outputPath)}'`
-    )
-  } catch {
-    await fallbackZipConversion(zipPath, outputPath)
-  }
+  await execCommand(
+    `${cliPath} convert -i '${escapeShellPath(zipPath)}' -o '${escapeShellPath(outputPath)}'`
+  )
 }
 
 function parseTemplateFromToml(outputContent: string): {

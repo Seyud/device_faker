@@ -10,7 +10,7 @@ use walkdir::WalkDir;
 use zip::ZipArchive;
 
 /// Convert configuration from system.prop format to config.toml
-pub fn convert_config(input: &str, output: &str) -> Result<()> {
+fn convert_config(input: &str, output: &str) -> Result<()> {
     println!("Converting config from {} to {}", input, output);
 
     let content = fs::read_to_string(input).context("Failed to read input file")?;
