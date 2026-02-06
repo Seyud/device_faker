@@ -102,7 +102,6 @@ export default tseslint.config(
       '@typescript-eslint/no-empty-object-type': 'off',
 
       // 通用代码质量规则
-      'no-console': ['warn', { allow: ['warn', 'error'] }],
       'no-debugger': 'warn',
       'no-empty': ['error', { allowEmptyCatch: true }],
       'no-process-exit': 'off',
