@@ -116,6 +116,9 @@ fn build(release: bool, verbose: bool) -> Result<()> {
     cargo.spawn()?.wait()?;
     cargo.current_dir("device_faker_cli/").spawn()?.wait()?;
 
+    // Build WebUI first so that module/webroot/ exists before copying
+    build_webui()?;
+
     let module_dir = module_dir();
     dir::copy(
         &module_dir,
@@ -136,8 +139,6 @@ fn build(release: bool, verbose: bool) -> Result<()> {
         &file::CopyOptions::new().overwrite(true),
     )
     .unwrap();
-
-    build_webui()?;
 
     let build_type = if release { "release" } else { "debug" };
     let package_path = Path::new("output").join(format!("device_faker-({build_type}).zip"));
@@ -262,8 +263,9 @@ fn cargo_ndk() -> Command {
 }
 
 fn build_webui() -> Result<()> {
+    let npm_cmd = if cfg!(windows) { "npm.cmd" } else { "npm" };
     let npm = || {
-        let mut command = Command::new("npm");
+        let mut command = Command::new(npm_cmd);
         command.current_dir("webui");
         command
     };
