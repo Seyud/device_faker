@@ -9,7 +9,7 @@ A device model spoofing module based on Zygisk that can configure different devi
 [![Version](https://img.shields.io/github/v/release/Seyud/Device_Faker?logo=github)](https://github.com/Seyud/Device_Faker/releases/latest)
 [![GitHub Downloads](https://img.shields.io/github/downloads/Seyud/Device_Faker/total?logo=github&logoColor=green)](https://github.com/Seyud/Device_Faker/releases)
 [![Language](https://img.shields.io/badge/language-Rust-orange?logo=rust&logoColor=orange)](https://www.rust-lang.org/)
-[![Telegram](https://img.shields.io/badge/chat-Device_Faker-2CA5E0?logo=telegram&logoColor=87CEEB)](https://t.me/device_faker)
+[![Telegram](https://img.shields.io/badge/group-Telegram-2CA5E0?logo=telegram&logoColor=87CEEB)](https://t.me/device_faker)
 
 ## Features ✨
 
