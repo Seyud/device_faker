@@ -7,6 +7,45 @@ const GITEE_REPO = 'device_faker_config_mirror'
 const GITEE_API_BASE = 'https://gitee.com/api/v5'
 const GITEE_RAW_BASE = `https://gitee.com/${GITEE_OWNER}/${GITEE_REPO}/raw/main`
 
+const TEMP_DIR = '/data/local/tmp'
+const MAX_RETRY = 3
+const TIMEOUT = 30
+
+async function downloadWithCurl(url: string, outputPath: string): Promise<boolean> {
+  const command = `curl -L -k --connect-timeout ${TIMEOUT} -o "${outputPath}" "${url}"`
+  try {
+    await execCommand(command)
+    return (await execCommand(`test -f "${outputPath}" && test -s "${outputPath}"`)) !== ''
+  } catch {
+    return false
+  }
+}
+
+async function downloadWithWget(url: string, outputPath: string): Promise<boolean> {
+  const command = `wget -q --timeout=${TIMEOUT} -O "${outputPath}" "${url}"`
+  try {
+    await execCommand(command)
+    return (await execCommand(`test -f "${outputPath}" && test -s "${outputPath}"`)) !== ''
+  } catch {
+    return false
+  }
+}
+
+async function downloadFile(url: string, outputPath: string): Promise<boolean> {
+  for (let attempt = 1; attempt <= MAX_RETRY; attempt++) {
+    if (await downloadWithCurl(url, outputPath)) {
+      return true
+    }
+    if (await downloadWithWget(url, outputPath)) {
+      return true
+    }
+    if (attempt < MAX_RETRY) {
+      await execCommand(`sleep 2`)
+    }
+  }
+  return false
+}
+
 export const TEMPLATE_CATEGORIES = {
   common: '通用设备',
   gaming: '游戏设备',
@@ -240,11 +279,15 @@ export async function fetchOnlineTemplates(): Promise<OnlineTemplatesResult> {
 }
 
 export async function downloadTemplate(onlineTemplate: OnlineTemplate): Promise<Template | null> {
-  const CLI_PATH = '/data/adb/modules/device_faker/bin/device_faker_cli'
-  const tempFile = `/data/local/tmp/template_${Date.now()}.toml`
+  const tempFile = `${TEMP_DIR}/template_${Date.now()}.toml`
 
   try {
-    await execCommand(`${CLI_PATH} import -s "${onlineTemplate.downloadUrl}" -o "${tempFile}"`)
+    const success = await downloadFile(onlineTemplate.downloadUrl, tempFile)
+    if (!success) {
+      console.error(`Failed to download template ${onlineTemplate.name}`)
+      return null
+    }
+
     const content = await execCommand(`cat "${tempFile}"`)
     await execCommand(`rm -f "${tempFile}"`).catch(() => {})
 
