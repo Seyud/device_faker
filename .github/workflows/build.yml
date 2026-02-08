@@ -27,6 +27,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Update module.prop version info
+        run: |
+          SHORT_HASH=$(git rev-parse --short HEAD)
+          TODAY=$(date +%Y%m%d)
+          RUN_NUMBER=${{ github.run_number }}
+          sed -i "s/^version=\(.*\)/version=\1 (${RUN_NUMBER}-${SHORT_HASH}-release)/" module/module.prop
+          sed -i "s/^versionCode=.*/versionCode=${TODAY}/" module/module.prop
+
       - name: Setup Android NDK
         uses: nttld/setup-ndk@v1
         id: setup-ndk
