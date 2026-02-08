@@ -10,7 +10,8 @@
           </div>
           <div class="status-info">
             <span class="status-label">{{ t('status.items.module_version') }}</span>
-            <span class="status-value">{{ moduleVersion }}</span>
+            <span class="status-value">{{ moduleVersionMain }}</span>
+            <span v-if="moduleVersionBuild" class="status-build">{{ moduleVersionBuild }}</span>
           </div>
         </div>
 
@@ -59,6 +60,16 @@ const { t } = useI18n()
 
 // 直接使用 store 中的 computed 属性，避免重复计算
 const moduleVersion = computed(() => configStore.moduleVersion)
+const moduleVersionMain = computed(() => {
+  const v = moduleVersion.value
+  const idx = v.indexOf('(')
+  return idx > 0 ? v.substring(0, idx).trim() : v
+})
+const moduleVersionBuild = computed(() => {
+  const v = moduleVersion.value
+  const match = v.match(/\((.+)\)/)
+  return match ? match[1] : ''
+})
 const deviceFakerCount = computed(() => configStore.deviceFakerCount)
 const templateCount = computed(() => configStore.templateCount)
 const workMode = computed(() => {
@@ -191,5 +202,12 @@ onActivated(() => {
   font-size: 1.25rem;
   font-weight: 600;
   color: var(--text);
+}
+
+.status-build {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  opacity: 0.7;
+  font-family: monospace;
 }
 </style>
