@@ -242,6 +242,11 @@ body {
   border: 1px solid var(--el-border-color);
 }
 
+.el-dialog {
+  border-radius: 20px !important;
+  overflow: hidden !important;
+}
+
 .dark .el-input__wrapper {
   background-color: var(--el-fill-color-blank) !important;
   box-shadow: 0 0 0 1px var(--el-border-color) inset !important;
