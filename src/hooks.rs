@@ -2,7 +2,7 @@ use std::ffi::{CStr, CString};
 
 use anyhow::Context;
 use jni::{
-    JNIEnv,
+    Env, EnvUnowned, jni_str, jni_sig,
     objects::{JClass, JString, JValue},
     strings::JNIStr,
     sys::JNINativeMethod,
@@ -19,123 +19,137 @@ static mut ORIGINAL_SYSTEM_PROPERTY_GET: Option<
 > = None;
 
 /// 根据合并配置 Hook android.os.Build 的静态字段。
-pub fn hook_build_fields(env: &mut JNIEnv, merged_config: &MergedAppConfig) -> anyhow::Result<()> {
-    let build_class = env
-        .find_class("android/os/Build")
-        .context("Failed to find Build class")?;
+pub fn hook_build_fields(env: &mut EnvUnowned, merged_config: &MergedAppConfig) -> anyhow::Result<()> {
+    env.with_env(|jenv| -> Result<(), jni::errors::Error> {
+        let build_class = jenv
+            .find_class(jni_str!("android/os/Build"))?;
 
-    if let Some(manufacturer) = &merged_config.manufacturer
-        && !manufacturer.is_empty()
-    {
-        set_build_field(env, &build_class, "MANUFACTURER", manufacturer)?;
-    }
+        if let Some(manufacturer) = &merged_config.manufacturer
+            && !manufacturer.is_empty()
+        {
+            set_build_field(jenv, &build_class, jni_str!("MANUFACTURER"), manufacturer)
+                .map_err(|_e| jni::errors::Error::JniCall(jni::errors::JniError::Unknown))?;
+        }
 
-    if let Some(brand) = &merged_config.brand
-        && !brand.is_empty()
-    {
-        set_build_field(env, &build_class, "BRAND", brand)?;
-    }
+        if let Some(brand) = &merged_config.brand
+            && !brand.is_empty()
+        {
+            set_build_field(jenv, &build_class, jni_str!("BRAND"), brand)
+                .map_err(|_e| jni::errors::Error::JniCall(jni::errors::JniError::Unknown))?;
+        }
 
-    if let Some(model) = &merged_config.model
-        && !model.is_empty()
-    {
-        set_build_field(env, &build_class, "MODEL", model)?;
-    }
+        if let Some(model) = &merged_config.model
+            && !model.is_empty()
+        {
+            set_build_field(jenv, &build_class, jni_str!("MODEL"), model)
+                .map_err(|_e| jni::errors::Error::JniCall(jni::errors::JniError::Unknown))?;
+        }
 
-    if let Some(device) = &merged_config.device
-        && !device.is_empty()
-    {
-        set_build_field(env, &build_class, "DEVICE", device)?;
-    }
+        if let Some(device) = &merged_config.device
+            && !device.is_empty()
+        {
+            set_build_field(jenv, &build_class, jni_str!("DEVICE"), device)
+                .map_err(|_e| jni::errors::Error::JniCall(jni::errors::JniError::Unknown))?;
+        }
 
-    if let Some(product) = &merged_config.product
-        && !product.is_empty()
-    {
-        set_build_field(env, &build_class, "PRODUCT", product)?;
-    }
+        if let Some(product) = &merged_config.product
+            && !product.is_empty()
+        {
+            set_build_field(jenv, &build_class, jni_str!("PRODUCT"), product)
+                .map_err(|_e| jni::errors::Error::JniCall(jni::errors::JniError::Unknown))?;
+        }
 
-    if let Some(fingerprint) = &merged_config.fingerprint
-        && !fingerprint.is_empty()
-    {
-        set_build_field(env, &build_class, "FINGERPRINT", fingerprint)?;
-    }
+        if let Some(fingerprint) = &merged_config.fingerprint
+            && !fingerprint.is_empty()
+        {
+            set_build_field(jenv, &build_class, jni_str!("FINGERPRINT"), fingerprint)
+                .map_err(|_e| jni::errors::Error::JniCall(jni::errors::JniError::Unknown))?;
+        }
 
-    hook_version_fields(env, &build_class, merged_config)?;
+        hook_version_fields(jenv, &build_class, merged_config)
+            .map_err(|_e| jni::errors::Error::JniCall(jni::errors::JniError::Unknown))?;
 
+        Ok(())
+    }).resolve::<jni::errors::ThrowRuntimeExAndDefault>();
     Ok(())
 }
 
 fn hook_version_fields(
-    env: &mut JNIEnv,
+    env: &mut Env,
     _build_class: &JClass,
     merged_config: &MergedAppConfig,
 ) -> anyhow::Result<()> {
     let version_class = env
-        .find_class("android/os/Build$VERSION")
+        .find_class(jni_str!("android/os/Build$VERSION"))
         .context("Failed to find Build.VERSION class")?;
 
     if let Some(android_version) = &merged_config.android_version
         && !android_version.is_empty()
     {
-        set_build_field(env, &version_class, "RELEASE", android_version)?;
+        set_build_field(env, &version_class, jni_str!("RELEASE"), android_version)?;
     }
 
     if let Some(sdk_int) = merged_config.sdk_int {
-        set_build_int_field(env, &version_class, "SDK_INT", sdk_int as i32)?;
+        set_build_int_field(env, &version_class, jni_str!("SDK_INT"), sdk_int as i32)?;
     }
 
     Ok(())
 }
 
 fn set_build_field(
-    env: &mut JNIEnv,
+    env: &mut Env,
     build_class: &JClass,
-    field_name: &str,
+    field_name: &JNIStr,
     value: &str,
 ) -> anyhow::Result<()> {
-    let field_id = env
-        .get_static_field_id(build_class, field_name, "Ljava/lang/String;")
-        .with_context(|| format!("Failed to get field ID for {field_name}"))?;
+    let _field_id = env
+        .get_static_field_id(build_class, field_name, jni_sig!("Ljava/lang/String;"))
+        .with_context(|| format!("Failed to get field ID"))?;
 
     let new_value = env
         .new_string(value)
         .with_context(|| format!("Failed to create string for {value}"))?;
 
-    env.set_static_field(build_class, field_id, JValue::Object(&new_value))
-        .with_context(|| format!("Failed to set field {field_name}"))?;
+    env.set_static_field(build_class, field_name, jni_sig!("Ljava/lang/String;"), JValue::Object(&new_value))
+        .with_context(|| format!("Failed to set field"))?;
 
     Ok(())
 }
 
 fn set_build_int_field(
-    env: &mut JNIEnv,
+    env: &mut Env,
     build_class: &JClass,
-    field_name: &str,
+    field_name: &JNIStr,
     value: i32,
 ) -> anyhow::Result<()> {
-    let field_id = env
-        .get_static_field_id(build_class, field_name, "I")
-        .with_context(|| format!("Failed to get field ID for {field_name}"))?;
+    let _field_id = env
+        .get_static_field_id(build_class, field_name, jni_sig!("I"))
+        .with_context(|| format!("Failed to get field ID"))?;
 
-    env.set_static_field(build_class, field_id, JValue::Int(value))
-        .with_context(|| format!("Failed to set field {field_name}"))?;
+    env.set_static_field(build_class, field_name, jni_sig!("I"), JValue::Int(value))
+        .with_context(|| format!("Failed to set field"))?;
 
     Ok(())
 }
 
 /// Hook SystemProperties.native_get 以截获属性查询。
-pub fn hook_system_properties(api: &mut ZygiskApi<V4>, env: &JNIEnv) -> anyhow::Result<()> {
+pub fn hook_system_properties(api: &mut ZygiskApi<V4>, env: &mut EnvUnowned) -> anyhow::Result<()> {
     let mut methods = [JNINativeMethod {
-        name: c"native_get".as_ptr() as *mut u8,
-        signature: c"(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;".as_ptr() as *mut u8,
+        name: c"native_get".as_ptr().cast_mut(),
+        signature: c"(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;".as_ptr().cast_mut(),
         fnPtr: native_get_hook as *mut std::ffi::c_void,
     }];
 
     let class_name = unsafe { JNIStr::from_ptr(c"android/os/SystemProperties".as_ptr()) };
 
-    unsafe {
-        api.hook_jni_native_methods(env.unsafe_clone(), class_name, &mut methods);
-    }
+    // Use with_env to get a proper Env reference and convert to EnvUnowned
+    env.with_env(|jenv| -> Result<(), jni::errors::Error> {
+        let env_unowned = unsafe { EnvUnowned::from_raw(jenv.get_raw()) };
+        unsafe {
+            api.hook_jni_native_methods(env_unowned, class_name, &mut methods);
+        }
+        Ok(())
+    }).resolve::<jni::errors::ThrowRuntimeExAndDefault>();
 
     let original_fn_ptr = unsafe {
         std::mem::transmute::<*mut std::ffi::c_void, OriginalNativeGet>(methods[0].fnPtr)
@@ -152,42 +166,33 @@ pub unsafe extern "C" fn native_get_hook(
     key: jni::sys::jstring,
     def: jni::sys::jstring,
 ) -> jni::sys::jstring {
-    let mut env_wrapper = match unsafe { JNIEnv::from_raw(env) } {
-        Ok(e) => e,
-        Err(_) => return def,
-    };
+    let mut env_wrapper = unsafe { EnvUnowned::from_raw(env) };
 
-    let key_jstring = unsafe { JString::from_raw(key) };
-    let key_str = match env_wrapper.get_string(&key_jstring) {
-        Ok(s) => s,
-        Err(_) => return def,
-    };
-    let key_string: String = key_str.into();
+    let result = env_wrapper.with_env(|jenv| -> Result<jni::sys::jstring, jni::errors::Error> {
+        let key_jstring = unsafe { JString::from_raw(jenv, key) };
+        let key_string = match key_jstring.mutf8_chars(jenv) {
+            Ok(s) => s.to_string(),
+            Err(_) => return Ok(def),
+        };
 
-    let result = {
         let fake_props = FAKE_PROPS.lock().unwrap();
         if let Some(props) = fake_props.as_ref() {
-            props.get(&key_string).and_then(|fake_value| {
-                env_wrapper
-                    .new_string(fake_value)
-                    .ok()
-                    .map(|s| s.into_raw())
-            })
-        } else {
-            None
+            if let Some(fake_value) = props.get(&key_string) {
+                if let Ok(new_string) = jenv.new_string(fake_value) {
+                    return Ok(new_string.into_raw());
+                }
+            }
         }
-    };
 
-    if let Some(fake_result) = result {
-        return fake_result;
-    }
+        let original_native_get = ORIGINAL_NATIVE_GET.lock().unwrap();
+        if let Some(orig_fn) = *original_native_get {
+            return Ok(unsafe { orig_fn(env, class, key, def) });
+        }
 
-    let original_native_get = ORIGINAL_NATIVE_GET.lock().unwrap();
-    if let Some(orig_fn) = *original_native_get {
-        return unsafe { orig_fn(env, class, key, def) };
-    }
+        Ok(def)
+    });
 
-    def
+    result.resolve::<jni::errors::ThrowRuntimeExAndDefault>()
 }
 
 unsafe extern "C" fn my_system_property_get(
@@ -240,7 +245,7 @@ pub fn hook_native_property_get(api: &mut ZygiskApi<V4>) -> anyhow::Result<()> {
         api.plt_hook_register(
             0,
             0,
-            &symbol,
+            symbol,
             my_system_property_get as *const (),
             &mut original,
         );

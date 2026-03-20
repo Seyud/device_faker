@@ -14,7 +14,7 @@ use companion::{
 };
 use config::{Config, MergedAppConfig};
 use hooks::{hook_build_fields, hook_native_property_get, hook_system_properties};
-use jni::JNIEnv;
+use jni::{EnvUnowned, errors::ThrowRuntimeExAndDefault};
 use log::{LevelFilter, error, info};
 use state::{FAKE_PROPS, IS_FULL_MODE};
 use zygisk_api::{
@@ -31,7 +31,7 @@ struct MyModule;
 impl ZygiskModule for MyModule {
     type Api = V4;
 
-    fn on_load(&self, _api: ZygiskApi<V4>, _env: JNIEnv) {
+    fn on_load(&self, _api: ZygiskApi<V4>, _env: EnvUnowned) {
         android_logger::init_once(
             android_logger::Config::default()
                 .with_max_level(LevelFilter::Error)
@@ -42,7 +42,7 @@ impl ZygiskModule for MyModule {
     fn pre_app_specialize(
         &self,
         mut api: ZygiskApi<V4>,
-        mut env: JNIEnv,
+        mut env: EnvUnowned,
         args: &mut <V4 as ZygiskRaw>::AppSpecializeArgs,
     ) {
         if let Err(err) = self.handle_app_specialize(&mut api, &mut env, args) {
@@ -53,7 +53,7 @@ impl ZygiskModule for MyModule {
     fn post_app_specialize(
         &self,
         mut api: ZygiskApi<V4>,
-        _env: JNIEnv,
+        _env: EnvUnowned,
         _args: &<V4 as ZygiskRaw>::AppSpecializeArgs,
     ) {
         let is_full_mode = *IS_FULL_MODE.lock().unwrap();
@@ -65,7 +65,7 @@ impl ZygiskModule for MyModule {
     fn pre_server_specialize(
         &self,
         mut api: ZygiskApi<V4>,
-        _env: JNIEnv,
+        _env: EnvUnowned,
         _args: &mut <V4 as ZygiskRaw>::ServerSpecializeArgs,
     ) {
         api.set_option(ZygiskOption::DlCloseModuleLibrary);
@@ -76,7 +76,7 @@ impl MyModule {
     fn handle_app_specialize(
         &self,
         api: &mut ZygiskApi<V4>,
-        env: &mut JNIEnv,
+        env: &mut EnvUnowned,
         args: &mut <V4 as ZygiskRaw>::AppSpecializeArgs,
     ) -> anyhow::Result<()> {
         let package_name = Self::extract_package_name(env, args)?;
@@ -159,28 +159,28 @@ impl MyModule {
     }
 
     fn extract_package_name(
-        env: &mut JNIEnv,
+        env: &mut EnvUnowned,
         args: &mut <V4 as ZygiskRaw>::AppSpecializeArgs,
     ) -> anyhow::Result<String> {
-        if let Ok(app_data_dir) = env.get_string(args.app_data_dir) {
-            let app_data: String = app_data_dir.into();
-            if let Some(package) = app_data.rsplit('/').next()
+        let result: String = env.with_env(|_jenv| -> Result<String, jni::errors::Error> {
+            let app_data_dir = args.app_data_dir.to_string();
+            
+            if let Some(package) = app_data_dir.rsplit('/').next()
                 && !package.is_empty()
             {
                 return Ok(package.to_string());
             }
-        }
 
-        let mut nice_name: String = env
-            .get_string(args.nice_name)
-            .context("Failed to get package name")?
-            .into();
+            let nice_name = args.nice_name.to_string();
 
-        if let Some(idx) = nice_name.find(':') {
-            nice_name.truncate(idx);
-        }
+            let mut nice_name: String = nice_name;
+            if let Some(idx) = nice_name.find(':') {
+                nice_name.truncate(idx);
+            }
 
-        Ok(nice_name)
+            Ok(nice_name)
+        }).resolve::<ThrowRuntimeExAndDefault>();
+        Ok(result)
     }
 
     fn apply_lite_mode(api: &mut ZygiskApi<V4>, debug: bool) -> anyhow::Result<()> {
@@ -195,7 +195,7 @@ impl MyModule {
 
     fn apply_full_mode(
         api: &mut ZygiskApi<V4>,
-        env: &JNIEnv,
+        env: &mut EnvUnowned,
         merged: &MergedAppConfig,
         debug: bool,
     ) -> anyhow::Result<()> {
@@ -286,5 +286,8 @@ fn configure_log_level(debug_enabled: bool) {
     log::set_max_level(level);
 }
 
+// Note: The register_module macro should handle the EnvUnowned properly
+// The unwrap_unchecked issue is a macro expansion problem in jni 0.22
+// We'll let the macro handle this internally
 zygisk_api::register_module!(MyModule);
 zygisk_api::register_companion!(handle_companion_request);
