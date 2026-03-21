@@ -11,6 +11,7 @@ interface LoadInstalledAppsOptions {
 
 export const useAppsStore = defineStore('apps', () => {
   const installedApps = ref<InstalledApp[]>([])
+  const resolvedPackageInfo = ref<Record<string, InstalledApp>>({})
   const pendingRequests = ref(0)
   const loading = computed(() => pendingRequests.value > 0)
   const error = ref<string | null>(null)
@@ -59,6 +60,18 @@ export const useAppsStore = defineStore('apps', () => {
     installedApps.value = Array.from(appMap.values())
   }
 
+  function upsertResolvedPackageInfo(apps: InstalledApp[]) {
+    if (apps.length === 0) return
+
+    const nextInfo = { ...resolvedPackageInfo.value }
+    for (const app of apps) {
+      nextInfo[app.packageName] = mergeInstalledApp(nextInfo[app.packageName], app)
+      resolvedPackages.add(normalizePackageName(app.packageName))
+    }
+
+    resolvedPackageInfo.value = nextInfo
+  }
+
   async function resolvePackagesInfo(packageNames: string[]) {
     const unresolved = Array.from(
       new Set(
@@ -82,7 +95,7 @@ export const useAppsStore = defineStore('apps', () => {
     await runWithLoading(async () => {
       const apps = await getAppsInfo(unresolved)
       normalizedPackages.forEach((pkg) => resolvedPackages.add(pkg))
-      upsertInstalledApps(apps.filter((app) => app.installed === true))
+      upsertResolvedPackageInfo(apps)
     }).finally(() => {
       normalizedPackages.forEach((pkg) => resolvingPackages.delete(pkg))
     })
@@ -182,6 +195,7 @@ export const useAppsStore = defineStore('apps', () => {
 
   return {
     installedApps,
+    resolvedPackageInfo,
     loading,
     error,
     searchQuery,

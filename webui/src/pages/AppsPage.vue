@@ -64,6 +64,23 @@ const showSystemApps = computed({
 // 首次进入页面时仅等待用户应用列表，附加补全任务改为后台执行
 const isInitializing = ref(!appsStore.hasLoadedUserApps)
 const installedApps = computed(() => appsStore.installedApps)
+const resolvedPackageInfo = computed(() => appsStore.resolvedPackageInfo)
+
+const installedPackageState = computed(() => {
+  const exactPackages = new Set<string>()
+  const normalizedPackages = new Set<string>()
+
+  for (const app of installedApps.value) {
+    if (app.installed === false) continue
+    exactPackages.add(app.packageName)
+    normalizedPackages.add(normalizePackageName(app.packageName))
+  }
+
+  return {
+    exactPackages,
+    normalizedPackages,
+  }
+})
 
 const configuredPackageState = computed(() => {
   const exactPackages = new Set<string>()
@@ -76,6 +93,7 @@ const configuredPackageState = computed(() => {
     configuredAppsMap.set(appConfig.package, {
       packageName: appConfig.package,
       appName: appConfig.package,
+      installed: false,
     })
   }
 
@@ -89,6 +107,7 @@ const configuredPackageState = computed(() => {
       configuredAppsMap.set(pkg, {
         packageName: pkg,
         appName: pkg,
+        installed: false,
       })
     }
   }
@@ -111,6 +130,22 @@ function isConfiguredPackage(packageName: string) {
   }
 
   return configuredPackageState.value.normalizedPackages.has(normalizePackageName(packageName))
+}
+
+function isInstalledPackage(packageName: string) {
+  if (installedPackageState.value.exactPackages.has(packageName)) {
+    return true
+  }
+
+  if (!/@\d+$/.test(packageName)) {
+    return false
+  }
+
+  return installedPackageState.value.normalizedPackages.has(normalizePackageName(packageName))
+}
+
+function getResolvedPackageInfo(packageName: string) {
+  return resolvedPackageInfo.value[packageName]
 }
 
 const allApps = computed<AppListItem[]>(() => {
@@ -144,14 +179,17 @@ const allApps = computed<AppListItem[]>(() => {
     // 查找具有相同归一化包名的已存在应用，复用其展示信息
     const normalized = normalizePackageName(app.packageName)
     const existingIdx = normalizedIndex.get(normalized)
+    const existingApp = existingIdx !== undefined ? result[existingIdx] : undefined
+    const resolvedInfo = getResolvedPackageInfo(app.packageName)
 
     const entry = {
-      // 如果有相同归一化包名的应用，复用其展示信息，否则使用默认信息
-      ...(existingIdx !== undefined ? result[existingIdx] : {}),
       packageName: app.packageName,
-      appName: existingIdx !== undefined ? result[existingIdx].appName : app.packageName,
-      installed: existingIdx !== undefined ? result[existingIdx].installed : app.installed,
-      isSystem: existingIdx !== undefined ? result[existingIdx].isSystem : app.isSystem,
+      appName: resolvedInfo?.appName || existingApp?.appName || app.packageName,
+      icon: resolvedInfo?.icon || existingApp?.icon || '',
+      versionName: resolvedInfo?.versionName || existingApp?.versionName || '',
+      versionCode: resolvedInfo?.versionCode ?? existingApp?.versionCode ?? 0,
+      installed: isInstalledPackage(app.packageName),
+      isSystem: existingApp?.isSystem ?? resolvedInfo?.isSystem ?? app.isSystem,
       configured: true,
     }
 

@@ -170,25 +170,38 @@ function getAppInfoViaWebUIX(
 /**
  * 使用 kernelsu-alt 的 getPackagesInfo API 获取应用信息
  */
-async function getAppInfoViaKernelSU(
-  packageNames: string[]
-): Promise<Map<string, KernelSUPackageInfo>> {
+async function getAppInfoViaKernelSU(packageNames: string[]): Promise<{
+  exactInfo: Map<string, KernelSUPackageInfo>
+  normalizedInfo: Map<string, KernelSUPackageInfo>
+}> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if (typeof (globalThis as any).ksu?.getPackagesInfo === 'undefined') {
-    return new Map()
+    return {
+      exactInfo: new Map(),
+      normalizedInfo: new Map(),
+    }
   }
 
   try {
     const info = await getPackagesInfoBatch(packageNames)
     const infos = Array.isArray(info) ? info : [info]
+    const exactInfo = new Map<string, KernelSUPackageInfo>()
+    const normalizedInfo = new Map<string, KernelSUPackageInfo>()
 
-    return infos.reduce((acc, item) => {
-      const normalized = normalizePackageName(item.packageName)
-      acc.set(normalized, item)
-      return acc
-    }, new Map<string, KernelSUPackageInfo>())
+    for (const item of infos) {
+      exactInfo.set(item.packageName, item)
+      normalizedInfo.set(normalizePackageName(item.packageName), item)
+    }
+
+    return {
+      exactInfo,
+      normalizedInfo,
+    }
   } catch {
-    return new Map()
+    return {
+      exactInfo: new Map(),
+      normalizedInfo: new Map(),
+    }
   }
 }
 
@@ -219,24 +232,36 @@ export async function getAppsInfo(packageNames: string[], options: GetAppsInfoOp
   }
 
   const { fallbackType, assumeInstalled = false } = options
-  const kernelSUInfo = await getAppInfoViaKernelSU(
-    uniquePackages.map((pkg) => normalizePackageName(pkg))
-  )
+  const kernelSUInfo = await getAppInfoViaKernelSU(uniquePackages)
 
   return uniquePackages.map<InstalledApp>((packageName) => {
     const normalizedPackage = normalizePackageName(packageName)
-    const info = kernelSUInfo.get(normalizedPackage)
-    const webUIXInfo = info ? null : getAppInfoViaWebUIX(normalizedPackage)
+    const hasUserSuffix = /@\d+$/.test(packageName)
+    const exactInfo = kernelSUInfo.exactInfo.get(packageName)
+    const fallbackInfo =
+      !exactInfo && hasUserSuffix ? kernelSUInfo.normalizedInfo.get(normalizedPackage) : undefined
+    const exactWebUIXInfo = exactInfo ? null : getAppInfoViaWebUIX(packageName)
+    const fallbackWebUIXInfo =
+      !exactInfo && !exactWebUIXInfo && hasUserSuffix
+        ? getAppInfoViaWebUIX(normalizedPackage)
+        : null
+    const displayInfo = exactInfo || exactWebUIXInfo || fallbackInfo || fallbackWebUIXInfo
+    const appName =
+      displayInfo && 'appLabel' in displayInfo
+        ? displayInfo.appLabel || packageName
+        : displayInfo && 'appName' in displayInfo
+          ? displayInfo.appName || packageName
+          : packageName
 
     return {
       packageName,
-      appName: info?.appLabel || webUIXInfo?.appName || packageName,
+      appName,
       icon: '',
-      versionName: info?.versionName || webUIXInfo?.versionName || '',
-      versionCode: info?.versionCode || webUIXInfo?.versionCode || 0,
-      installed: assumeInstalled || Boolean(info || webUIXInfo),
+      versionName: displayInfo?.versionName || '',
+      versionCode: displayInfo?.versionCode || 0,
+      installed: assumeInstalled || Boolean(exactInfo || exactWebUIXInfo),
       isSystem:
-        info?.isSystem ??
+        exactInfo?.isSystem ??
         (fallbackType === 'system' ? true : fallbackType === 'user' ? false : undefined),
     }
   })
