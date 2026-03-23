@@ -1,22 +1,33 @@
 import { parse as parseToml } from 'smol-toml'
-import type { Template, TemplateMeta } from '../types'
+import type { OnlineTemplateSource, Template, TemplateMeta } from '../types'
 import { execCommand } from './ksu'
 import { extractTemplateMeta, sanitizeTemplate } from './config'
 
-const GITEE_OWNER = 'Seyud'
-const GITEE_REPO = 'device_faker_config_mirror'
-const GITEE_API_BASE = 'https://gitee.com/api/v5'
-const GITEE_RAW_BASE = `https://gitee.com/${GITEE_OWNER}/${GITEE_REPO}/raw/main`
-
-// GitHub 镜像源配置 (config 子模块)
-const GITHUB_OWNER = 'Seyud'
-const GITHUB_REPO = 'device_faker_config'
-const GITHUB_RAW_BASE = `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/main`
-
-// CDN 镜像源配置
-const JSDELIVR_BASE = `https://cdn.jsdelivr.net/gh/${GITHUB_OWNER}/${GITHUB_REPO}@main`
-const STATICALLY_BASE = `https://cdn.statically.io/gh/${GITHUB_OWNER}/${GITHUB_REPO}/main`
-const GITHACK_BASE = `https://raw.githack.com/${GITHUB_OWNER}/${GITHUB_REPO}/main`
+const ONLINE_TEMPLATE_SOURCE_CONFIGS = {
+  gitee: {
+    owner: 'Seyud',
+    repo: 'device_faker_config_mirror',
+    apiBase: 'https://gitee.com/api/v5',
+    treeBase: 'https://gitee.com/Seyud/device_faker_config_mirror/tree/main',
+    rawBase: 'https://gitee.com/Seyud/device_faker_config_mirror/raw/main',
+  },
+  github: {
+    owner: 'Seyud',
+    repo: 'device_faker_config',
+    apiBase: 'https://api.github.com',
+    treeBase: 'https://github.com/Seyud/device_faker_config/tree/main',
+    rawBase: 'https://raw.githubusercontent.com/Seyud/device_faker_config/main',
+  },
+} as const satisfies Record<
+  OnlineTemplateSource,
+  {
+    owner: string
+    repo: string
+    apiBase: string
+    treeBase: string
+    rawBase: string
+  }
+>
 
 const TEMP_DIR = '/data/local/tmp'
 const MAX_RETRY = 3
@@ -109,74 +120,42 @@ async function downloadWithWget(
   }
 }
 
-/**
- * 获取镜像源 URL 列表
- * @param originalUrl 原始 URL
- * @returns 镜像源 URL 数组
- */
-function getMirrorUrls(originalUrl: string): string[] {
-  const urls: string[] = [originalUrl]
+function getSourceConfig(source: OnlineTemplateSource) {
+  return ONLINE_TEMPLATE_SOURCE_CONFIGS[source]
+}
 
-  // 如果原始 URL 是 Gitee，添加多个镜像源
-  if (originalUrl.includes('gitee.com')) {
-    // GitHub 官方源
-    const githubUrl = originalUrl.replace(GITEE_RAW_BASE, GITHUB_RAW_BASE)
-    urls.push(githubUrl)
-
-    // jsDelivr CDN（国内较快）
-    const jsDelivrUrl = originalUrl.replace(GITEE_RAW_BASE, JSDELIVR_BASE)
-    urls.push(jsDelivrUrl)
-
-    // Statically CDN
-    const staticallyUrl = originalUrl.replace(GITEE_RAW_BASE, STATICALLY_BASE)
-    urls.push(staticallyUrl)
-
-    // Githack CDN
-    const githackUrl = originalUrl.replace(GITEE_RAW_BASE, GITHACK_BASE)
-    urls.push(githackUrl)
-  }
-
-  return urls
+function buildContentsApiUrl(source: OnlineTemplateSource, path: string): string {
+  const config = getSourceConfig(source)
+  return `${config.apiBase}/repos/${config.owner}/${config.repo}/contents/${path}?ref=main`
 }
 
 /**
- * 下载文件（支持多工具、多镜像、重试）
+ * 下载文件（支持多工具与重试）
  * @param url 下载地址
  * @param outputPath 输出路径
  * @returns 下载是否成功
  */
 async function downloadFile(url: string, outputPath: string): Promise<boolean> {
-  const urls = getMirrorUrls(url)
+  for (let attempt = 1; attempt <= MAX_RETRY; attempt++) {
+    console.log(`[Download] 第 ${attempt}/${MAX_RETRY} 次尝试...`)
 
-  for (let urlIndex = 0; urlIndex < urls.length; urlIndex++) {
-    const currentUrl = urls[urlIndex]
-    const isMirror = urlIndex > 0
-
-    if (isMirror) {
-      console.log(`[Download] 切换到镜像源: ${currentUrl}`)
+    // 尝试使用 curl
+    if (await downloadWithCurl(url, outputPath, attempt > 1)) {
+      return true
     }
 
-    for (let attempt = 1; attempt <= MAX_RETRY; attempt++) {
-      console.log(`[Download] 第 ${attempt}/${MAX_RETRY} 次尝试...`)
+    // 尝试使用 wget
+    if (await downloadWithWget(url, outputPath, attempt > 1)) {
+      return true
+    }
 
-      // 尝试使用 curl
-      if (await downloadWithCurl(currentUrl, outputPath, attempt > 1)) {
-        return true
-      }
-
-      // 尝试使用 wget
-      if (await downloadWithWget(currentUrl, outputPath, attempt > 1)) {
-        return true
-      }
-
-      if (attempt < MAX_RETRY) {
-        console.log(`[Download] 等待 2 秒后重试...`)
-        await execCommand(`sleep 2`)
-      }
+    if (attempt < MAX_RETRY) {
+      console.log(`[Download] 等待 2 秒后重试...`)
+      await execCommand(`sleep 2`)
     }
   }
 
-  console.error(`[Download] 所有镜像源均下载失败: ${url}`)
+  console.error(`[Download] 下载失败: ${url}`)
   return false
 }
 
@@ -204,7 +183,7 @@ export interface OnlineTemplatesResult {
   brands: string[]
 }
 
-const brandCache = new Map<TemplateCategory, string[]>()
+const brandCache = new Map<string, string[]>()
 
 /**
  * 使用 curl 执行 HTTP GET 请求
@@ -257,52 +236,41 @@ async function httpGetWithWget(url: string, outputPath?: string): Promise<string
 }
 
 /**
- * HTTP GET 请求（自动尝试 curl/wget，支持多镜像源）
+ * HTTP GET 请求（自动尝试 curl/wget）
  * @param url 请求地址
  * @param maxRetries 最大重试次数
  * @returns 响应内容或 null
  */
 async function httpGet(url: string, maxRetries: number = MAX_RETRY): Promise<string | null> {
-  const urls = getMirrorUrls(url)
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    console.log(`[HTTP] 第 ${attempt}/${maxRetries} 次尝试...`)
 
-  for (let urlIndex = 0; urlIndex < urls.length; urlIndex++) {
-    const currentUrl = urls[urlIndex]
-    const isMirror = urlIndex > 0
-
-    if (isMirror) {
-      console.log(`[HTTP] 切换到镜像源: ${currentUrl}`)
+    // 尝试使用 curl
+    const curlResult = await httpGetWithCurl(url)
+    if (curlResult && curlResult.length > 0) {
+      console.log(`[HTTP] curl 请求成功，响应大小: ${curlResult.length} bytes`)
+      return curlResult
     }
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      console.log(`[HTTP] 第 ${attempt}/${maxRetries} 次尝试...`)
+    // 尝试使用 wget
+    const wgetResult = await httpGetWithWget(url)
+    if (wgetResult && wgetResult.length > 0) {
+      console.log(`[HTTP] wget 请求成功，响应大小: ${wgetResult.length} bytes`)
+      return wgetResult
+    }
 
-      // 尝试使用 curl
-      const curlResult = await httpGetWithCurl(currentUrl)
-      if (curlResult && curlResult.length > 0) {
-        console.log(`[HTTP] curl 请求成功，响应大小: ${curlResult.length} bytes`)
-        return curlResult
-      }
-
-      // 尝试使用 wget
-      const wgetResult = await httpGetWithWget(currentUrl)
-      if (wgetResult && wgetResult.length > 0) {
-        console.log(`[HTTP] wget 请求成功，响应大小: ${wgetResult.length} bytes`)
-        return wgetResult
-      }
-
-      if (attempt < maxRetries) {
-        console.log(`[HTTP] 等待 2 秒后重试...`)
-        await execCommand(`sleep 2`)
-      }
+    if (attempt < maxRetries) {
+      console.log(`[HTTP] 等待 2 秒后重试...`)
+      await execCommand(`sleep 2`)
     }
   }
 
-  console.error(`[HTTP] 所有镜像源均请求失败: ${url}`)
+  console.error(`[HTTP] 请求失败: ${url}`)
   return null
 }
 
-async function fetchDirsFromAPI(path: string): Promise<string[]> {
-  const url = `${GITEE_API_BASE}/repos/${GITEE_OWNER}/${GITEE_REPO}/contents/${path}?ref=main`
+async function fetchDirsFromAPI(path: string, source: OnlineTemplateSource): Promise<string[]> {
+  const url = buildContentsApiUrl(source, path)
   try {
     const content = await httpGet(url)
     if (!content) return []
@@ -316,30 +284,42 @@ async function fetchDirsFromAPI(path: string): Promise<string[]> {
   }
 }
 
-async function getBrandCategories(category: TemplateCategory): Promise<string[]> {
-  if (brandCache.has(category)) {
-    return brandCache.get(category)!
+function getBrandCacheKey(source: OnlineTemplateSource, category: TemplateCategory): string {
+  return `${source}:${category}`
+}
+
+async function getBrandCategories(
+  category: TemplateCategory,
+  source: OnlineTemplateSource
+): Promise<string[]> {
+  const cacheKey = getBrandCacheKey(source, category)
+
+  if (brandCache.has(cacheKey)) {
+    return brandCache.get(cacheKey)!
   }
 
   const path = `templates/${category}`
-  const dirs = await fetchDirsFromAPI(path)
+  const dirs = await fetchDirsFromAPI(path, source)
   const brands = dirs.filter((dir) => !dir.startsWith('.'))
 
-  brandCache.set(category, brands)
+  brandCache.set(cacheKey, brands)
   return brands
 }
 
-export async function fetchBrandsByCategory(category: TemplateCategory): Promise<string[]> {
-  return getBrandCategories(category)
+export async function fetchBrandsByCategory(
+  category: TemplateCategory,
+  source: OnlineTemplateSource
+): Promise<string[]> {
+  return getBrandCategories(category, source)
 }
 
-export async function fetchAllBrands(): Promise<string[]> {
+export async function fetchAllBrands(source: OnlineTemplateSource): Promise<string[]> {
   const categories = Object.keys(TEMPLATE_CATEGORIES) as TemplateCategory[]
   const allBrands = new Set<string>()
 
   await Promise.all(
     categories.map(async (cat) => {
-      const brands = await getBrandCategories(cat)
+      const brands = await getBrandCategories(cat, source)
       brands.forEach((b) => allBrands.add(b))
     })
   )
@@ -350,10 +330,12 @@ export async function fetchAllBrands(): Promise<string[]> {
 async function getTomlFilesFromHTML(
   path: string,
   category: TemplateCategory,
-  brands: string[]
+  brands: string[],
+  source: OnlineTemplateSource
 ): Promise<OnlineTemplate[]> {
   const templates: OnlineTemplate[] = []
-  const url = `https://gitee.com/${GITEE_OWNER}/${GITEE_REPO}/tree/main/${path}`
+  const config = getSourceConfig(source)
+  const url = `${config.treeBase}/${path}`
 
   try {
     const html = await httpGet(url, MAX_RETRY)
@@ -361,11 +343,11 @@ async function getTomlFilesFromHTML(
 
     const escapedPath = path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     const fileRegex = new RegExp(
-      `/${GITEE_OWNER}/${GITEE_REPO}/blob/main/(${escapedPath}/[^"]+\\.toml)`,
+      `/${config.owner}/${config.repo}/blob/main/(${escapedPath}/[^"]+\\.toml)`,
       'g'
     )
     const dirRegex = new RegExp(
-      `/${GITEE_OWNER}/${GITEE_REPO}/tree/main/(${escapedPath}/[^"/]+)(?=")`,
+      `/${config.owner}/${config.repo}/tree/main/(${escapedPath}/[^"/]+)(?=")`,
       'g'
     )
 
@@ -392,7 +374,7 @@ async function getTomlFilesFromHTML(
         category,
         brand: null,
         path: filePath,
-        downloadUrl: `${GITEE_RAW_BASE}/${filePath}`,
+        downloadUrl: `${config.rawBase}/${filePath}`,
       })
     }
 
@@ -409,7 +391,7 @@ async function getTomlFilesFromHTML(
     }
 
     for (const { dirPath, brand } of brandDirs) {
-      const subTemplates = await getTomlFilesFromHTML(dirPath, category, brands)
+      const subTemplates = await getTomlFilesFromHTML(dirPath, category, brands, source)
       subTemplates.forEach((t) => {
         t.brand = brand
       })
@@ -417,7 +399,7 @@ async function getTomlFilesFromHTML(
     }
 
     for (const dirPath of normalDirs) {
-      const subTemplates = await getTomlFilesFromHTML(dirPath, category, brands)
+      const subTemplates = await getTomlFilesFromHTML(dirPath, category, brands, source)
       templates.push(...subTemplates)
     }
 
@@ -431,10 +413,12 @@ async function getTomlFilesFromHTML(
 async function getTomlFilesFromAPI(
   path: string,
   category: TemplateCategory,
-  brands: string[]
+  brands: string[],
+  source: OnlineTemplateSource
 ): Promise<OnlineTemplate[]> {
   const templates: OnlineTemplate[] = []
-  const url = `${GITEE_API_BASE}/repos/${GITEE_OWNER}/${GITEE_REPO}/contents/${path}?ref=main`
+  const config = getSourceConfig(source)
+  const url = buildContentsApiUrl(source, path)
 
   try {
     const content = await httpGet(url, MAX_RETRY)
@@ -451,18 +435,18 @@ async function getTomlFilesFromAPI(
           category,
           brand: null,
           path: file.path,
-          downloadUrl: `${GITEE_RAW_BASE}/${file.path}`,
+          downloadUrl: `${config.rawBase}/${file.path}`,
         })
       } else if (file.type === 'dir') {
         const dirName = file.name
         if (brands.includes(dirName)) {
-          const brandTemplates = await getTomlFilesFromAPI(file.path, category, brands)
+          const brandTemplates = await getTomlFilesFromAPI(file.path, category, brands, source)
           brandTemplates.forEach((t) => {
             t.brand = dirName
           })
           templates.push(...brandTemplates)
         } else {
-          const subTemplates = await getTomlFilesFromAPI(file.path, category, brands)
+          const subTemplates = await getTomlFilesFromAPI(file.path, category, brands, source)
           templates.push(...subTemplates)
         }
       }
@@ -475,19 +459,22 @@ async function getTomlFilesFromAPI(
   }
 }
 
-async function getTomlFiles(category: TemplateCategory): Promise<OnlineTemplate[]> {
+async function getTomlFiles(
+  category: TemplateCategory,
+  source: OnlineTemplateSource
+): Promise<OnlineTemplate[]> {
   const path = `templates/${category}`
-  const brands = await getBrandCategories(category)
+  const brands = await getBrandCategories(category, source)
 
   try {
-    const templates = await getTomlFilesFromAPI(path, category, brands)
+    const templates = await getTomlFilesFromAPI(path, category, brands, source)
     if (templates.length > 0) return templates
   } catch (apiError) {
     console.warn(`API method failed for ${category}:`, apiError)
   }
 
   try {
-    const templates = await getTomlFilesFromHTML(path, category, brands)
+    const templates = await getTomlFilesFromHTML(path, category, brands, source)
     if (templates.length > 0) return templates
   } catch (htmlError) {
     console.error(`HTML method failed for ${category}:`, htmlError)
@@ -496,11 +483,13 @@ async function getTomlFiles(category: TemplateCategory): Promise<OnlineTemplate[
   return []
 }
 
-export async function fetchOnlineTemplates(): Promise<OnlineTemplatesResult> {
+export async function fetchOnlineTemplates(
+  source: OnlineTemplateSource
+): Promise<OnlineTemplatesResult> {
   const categories = Object.keys(TEMPLATE_CATEGORIES) as TemplateCategory[]
-  const results = await Promise.all(categories.map((cat) => getTomlFiles(cat)))
+  const results = await Promise.all(categories.map((cat) => getTomlFiles(cat, source)))
   const templates = results.flat()
-  const brands = await fetchAllBrands()
+  const brands = await fetchAllBrands(source)
 
   return { templates, brands }
 }

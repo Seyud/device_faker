@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
-import type { Settings } from '../types'
+import type { OnlineTemplateSource, Settings } from '../types'
 
 const SETTINGS_KEY = 'device_faker_settings'
 
@@ -9,6 +9,7 @@ export const useSettingsStore = defineStore('settings', () => {
     theme: 'system',
     language: 'system',
     showSystemApps: false,
+    onlineTemplateSource: 'gitee',
   })
 
   // 加载设置
@@ -21,6 +22,7 @@ export const useSettingsStore = defineStore('settings', () => {
           theme: 'system',
           language: 'system',
           showSystemApps: false,
+          onlineTemplateSource: 'gitee',
           ...parsed,
         }
       } catch {
@@ -60,6 +62,14 @@ export const useSettingsStore = defineStore('settings', () => {
     saveSettings()
   }
 
+  const onlineTemplateSource = ref<OnlineTemplateSource>('gitee')
+
+  function setOnlineTemplateSource(source: OnlineTemplateSource) {
+    settings.value.onlineTemplateSource = source
+    onlineTemplateSource.value = source
+    saveSettings()
+  }
+
   // 监听设置变化
   watch(settings, saveSettings, { deep: true })
 
@@ -68,14 +78,17 @@ export const useSettingsStore = defineStore('settings', () => {
   theme.value = settings.value.theme
   language.value = settings.value.language
   showSystemApps.value = settings.value.showSystemApps
+  onlineTemplateSource.value = settings.value.onlineTemplateSource
 
   return {
     settings,
     theme,
     language,
     showSystemApps,
+    onlineTemplateSource,
     setTheme,
     setLanguage,
     setShowSystemApps,
+    setOnlineTemplateSource,
   }
 })

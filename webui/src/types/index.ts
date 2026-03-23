@@ -1,4 +1,5 @@
 export type SpoofMode = 'lite' | 'full' | 'resetprop'
+export type OnlineTemplateSource = 'gitee' | 'github'
 
 export interface CustomProps {
   [key: string]: string
@@ -69,4 +70,5 @@ export interface Settings {
   theme: 'system' | 'light' | 'dark'
   language: 'system' | 'zh' | 'en'
   showSystemApps: boolean
+  onlineTemplateSource: OnlineTemplateSource
 }

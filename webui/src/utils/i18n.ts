@@ -159,7 +159,12 @@ export const messages = {
         import: '导入',
         empty_category: '该分类暂无模板',
         close: '关闭',
+        source_button: '模板源：{source}',
         refresh: '刷新列表',
+        sources: {
+          gitee: 'Gitee',
+          github: 'GitHub',
+        },
         toasts: {
           start_loading: '开始加载在线模板...',
           fetching_list: '正在获取模板列表...',
@@ -449,7 +454,12 @@ export const messages = {
         import: 'Import',
         empty_category: 'No templates in this category',
         close: 'Close',
+        source_button: 'Source: {source}',
         refresh: 'Refresh List',
+        sources: {
+          gitee: 'Gitee',
+          github: 'GitHub',
+        },
         toasts: {
           start_loading: 'Starting load online templates...',
           fetching_list: 'Fetching template list...',

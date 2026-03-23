@@ -144,7 +144,10 @@
 
     <template #footer>
       <el-button @click="visible = false">{{ t('templates.online.close') }}</el-button>
-      <el-button type="primary" @click="loadTemplates">{{
+      <el-button :disabled="loading" @click="toggleTemplateSource">
+        {{ t('templates.online.source_button', { source: currentSourceLabel }) }}
+      </el-button>
+      <el-button type="primary" :disabled="loading" @click="loadTemplates">{{
         t('templates.online.refresh')
       }}</el-button>
     </template>
@@ -165,8 +168,10 @@ import {
   type OnlineTemplatesResult,
 } from '../utils/onlineTemplates'
 import { useConfigStore } from '../stores/config'
+import { useSettingsStore } from '../stores/settings'
 import { useI18n } from '../utils/i18n'
 import { useLazyMessageBox } from '../utils/elementPlus'
+import type { OnlineTemplateSource } from '../types'
 
 const props = defineProps<{
   modelValue: boolean
@@ -177,6 +182,7 @@ const emit = defineEmits<{
 }>()
 
 const configStore = useConfigStore()
+const settingsStore = useSettingsStore()
 const { t } = useI18n()
 const getMessageBox = useLazyMessageBox()
 
@@ -188,24 +194,39 @@ const visible = computed({
 const loading = ref(false)
 const error = ref<string | null>(null)
 const templates = ref<OnlineTemplate[]>([])
-const allBrands = ref<string[]>([])
 const brandsByCategory = ref<Record<string, string[]>>({})
 const selectedCategory = ref<TemplateCategory>('common')
 const selectedBrand = ref<string | null>(null)
 const importingTemplates = ref(new Set<string>())
+const loadSessionId = ref(0)
 
-async function loadBrandsForCategory(category: TemplateCategory) {
-  if (!brandsByCategory.value[category]) {
-    brandsByCategory.value[category] = await fetchBrandsByCategory(category)
+const currentSource = computed<OnlineTemplateSource>({
+  get: () => settingsStore.onlineTemplateSource,
+  set: (value) => settingsStore.setOnlineTemplateSource(value),
+})
+
+const currentSourceLabel = computed(() => t(`templates.online.sources.${currentSource.value}`))
+
+function getBrandCacheKey(source: OnlineTemplateSource, category: TemplateCategory): string {
+  return `${source}:${category}`
+}
+
+async function loadBrandsForCategory(
+  category: TemplateCategory,
+  source: OnlineTemplateSource = currentSource.value
+) {
+  const cacheKey = getBrandCacheKey(source, category)
+  if (!brandsByCategory.value[cacheKey]) {
+    brandsByCategory.value[cacheKey] = await fetchBrandsByCategory(category, source)
   }
 }
 
 const availableBrands = computed(() => {
-  return brandsByCategory.value[selectedCategory.value] || []
+  return brandsByCategory.value[getBrandCacheKey(currentSource.value, selectedCategory.value)] || []
 })
 
 watch(selectedCategory, (newCategory) => {
-  loadBrandsForCategory(newCategory)
+  void loadBrandsForCategory(newCategory)
   selectedBrand.value = null
 })
 
@@ -218,14 +239,21 @@ const filteredTemplates = computed(() => {
 })
 
 async function loadTemplates() {
+  const source = currentSource.value
+  const currentLoadId = ++loadSessionId.value
   loading.value = true
   error.value = null
+  templates.value = []
 
   toast(t('templates.online.toasts.start_loading'))
 
   try {
     toast(t('templates.online.toasts.fetching_list'))
-    const result: OnlineTemplatesResult = await fetchOnlineTemplates()
+    const result: OnlineTemplatesResult = await fetchOnlineTemplates(source)
+
+    if (currentLoadId !== loadSessionId.value) {
+      return
+    }
 
     toast(t('templates.online.toasts.got_templates', { count: result.templates.length }))
 
@@ -236,28 +264,45 @@ async function loadTemplates() {
     }
 
     templates.value = result.templates
-    allBrands.value = result.brands
-    await loadBrandsForCategory(selectedCategory.value)
+    await loadBrandsForCategory(selectedCategory.value, source)
+
+    if (currentLoadId !== loadSessionId.value) {
+      return
+    }
+
     toast(t('templates.online.toasts.list_loaded'))
 
     let successCount = 0
     let failCount = 0
 
     Promise.all(
-      result.templates.map(async (t, index) => {
+      result.templates.map(async (t) => {
         try {
           const result = await downloadTemplate(t)
-          if (result) {
-            templates.value[index] = { ...t, template: result.template, meta: result.meta }
+          if (result && currentLoadId === loadSessionId.value) {
+            const templateIndex = templates.value.findIndex((template) => template.path === t.path)
+            if (templateIndex !== -1) {
+              templates.value[templateIndex] = {
+                ...templates.value[templateIndex],
+                template: result.template,
+                meta: result.meta,
+              }
+            }
             successCount++
-          } else {
+          } else if (currentLoadId === loadSessionId.value) {
             failCount++
           }
         } catch {
-          failCount++
+          if (currentLoadId === loadSessionId.value) {
+            failCount++
+          }
         }
       })
     ).then(() => {
+      if (currentLoadId !== loadSessionId.value) {
+        return
+      }
+
       if (successCount > 0) {
         toast(t('templates.online.toasts.content_loaded', { count: successCount }))
       }
@@ -266,11 +311,26 @@ async function loadTemplates() {
       }
     })
   } catch (e) {
+    if (currentLoadId !== loadSessionId.value) {
+      return
+    }
     error.value = e instanceof Error ? e.message : t('templates.online.errors.load_failed')
     toast(t('templates.online.toasts.load_failed', { error: error.value }))
   } finally {
-    loading.value = false
+    if (currentLoadId === loadSessionId.value) {
+      loading.value = false
+    }
   }
+}
+
+async function toggleTemplateSource() {
+  if (loading.value) {
+    return
+  }
+
+  currentSource.value = currentSource.value === 'gitee' ? 'github' : 'gitee'
+  selectedBrand.value = null
+  await loadTemplates()
 }
 
 // 导入模板
