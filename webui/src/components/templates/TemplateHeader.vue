@@ -9,7 +9,6 @@
           type="text"
           class="search-input"
           :placeholder="t('templates.search.placeholder')"
-          @input="emit('search', searchQuery)"
         />
         <button v-if="searchQuery" class="clear-btn" @click="clearSearch">
           <X :size="16" />

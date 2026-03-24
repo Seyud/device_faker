@@ -1,30 +1,35 @@
 <template>
   <div class="template-page">
-    <TemplateHeader
-      :locale="locale"
-      @open-online="showOnlineDialog"
-      @open-create="showCreateDialog"
-      @search="handleSearch"
+    <OnlineTemplateLibraryView
+      v-if="onlineTemplatesStore.libraryOpen"
+      @close="closeOnlineLibrary"
     />
 
-    <TemplateList
-      :templates="filteredTemplates"
-      :is-searching="searchQuery.length > 0"
-      @edit="handleEdit"
-      @delete="deleteTemplateConfirm"
-    />
+    <template v-else>
+      <TemplateHeader
+        :locale="locale"
+        @open-online="showOnlineLibrary"
+        @open-create="showCreateDialog"
+        @search="handleSearch"
+      />
 
-    <TemplateDialog
-      v-if="dialogVisible"
-      v-model="dialogVisible"
-      :is-editing="isEditing"
-      :locale="locale"
-      :template-name="editingTemplateName"
-      :template-data="editingTemplate"
-      @saved="handleTemplateSaved"
-    />
+      <TemplateList
+        :templates="filteredTemplates"
+        :is-searching="searchQuery.length > 0"
+        @edit="handleEdit"
+        @delete="deleteTemplateConfirm"
+      />
 
-    <OnlineTemplateDialog v-if="onlineDialogVisible" v-model="onlineDialogVisible" />
+      <TemplateDialog
+        v-if="dialogVisible"
+        v-model="dialogVisible"
+        :is-editing="isEditing"
+        :locale="locale"
+        :template-name="editingTemplateName"
+        :template-data="editingTemplate"
+        @saved="handleTemplateSaved"
+      />
+    </template>
   </div>
 </template>
 
@@ -32,7 +37,9 @@
 import { computed, defineAsyncComponent, onActivated, ref } from 'vue'
 import TemplateHeader from '../components/templates/TemplateHeader.vue'
 import TemplateList from '../components/templates/TemplateList.vue'
+import OnlineTemplateLibraryView from '../components/OnlineTemplateLibraryView.vue'
 import { useConfigStore } from '../stores/config'
+import { useOnlineTemplatesStore } from '../stores/onlineTemplates'
 import { useI18n } from '../utils/i18n'
 import { useLazyMessageBox } from '../utils/elementPlus'
 import { toast } from 'kernelsu-alt'
@@ -41,11 +48,9 @@ import type { Template } from '../types'
 const TemplateDialog = defineAsyncComponent(
   () => import('../components/templates/TemplateDialog.vue')
 )
-const OnlineTemplateDialog = defineAsyncComponent(
-  () => import('../components/OnlineTemplateDialog.vue')
-)
 
 const configStore = useConfigStore()
+const onlineTemplatesStore = useOnlineTemplatesStore()
 const { t, locale } = useI18n()
 const getMessageBox = useLazyMessageBox()
 
@@ -88,13 +93,17 @@ function handleSearch(query: string) {
 }
 
 const dialogVisible = ref(false)
-const onlineDialogVisible = ref(false)
 const isEditing = ref(false)
 const editingTemplateName = ref<string | null>(null)
 const editingTemplate = ref<Template | null>(null)
 
-function showOnlineDialog() {
-  onlineDialogVisible.value = true
+function showOnlineLibrary() {
+  onlineTemplatesStore.openLibrary()
+  void onlineTemplatesStore.ensureCatalogLoaded()
+}
+
+function closeOnlineLibrary() {
+  onlineTemplatesStore.closeLibrary()
 }
 
 function showCreateDialog() {

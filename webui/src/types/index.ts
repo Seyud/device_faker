@@ -1,5 +1,9 @@
 export type SpoofMode = 'lite' | 'full' | 'resetprop'
 export type OnlineTemplateSource = 'gitee' | 'github'
+export type OnlineTemplateLoadState = 'idle' | 'loading' | 'ready' | 'error'
+export type OnlineTemplateDetailsState = 'idle' | 'loading' | 'partial' | 'complete' | 'error'
+export type TemplateCategory = 'common' | 'gaming' | 'transcend'
+export type TemplateCategoryFilter = TemplateCategory | 'all'
 
 export interface CustomProps {
   [key: string]: string
@@ -43,6 +47,59 @@ export interface TemplateMeta {
   version_code?: number
   author?: string
   description?: string
+}
+
+export interface OnlineTemplateIndexItem {
+  id: string
+  name: string
+  displayName: string
+  category: TemplateCategory
+  brand: string | null
+  path: string
+  sha?: string
+  source: OnlineTemplateSource
+  contentUrl: string
+}
+
+export interface OnlineTemplateDetail {
+  template: Template
+  meta?: TemplateMeta
+}
+
+export interface OnlineTemplateDetailState {
+  status: OnlineTemplateLoadState
+  detail?: OnlineTemplateDetail
+  error?: string | null
+  updatedAt?: number
+  version?: string
+}
+
+export interface OnlineTemplateRecord extends OnlineTemplateIndexItem {
+  detailStatus: OnlineTemplateLoadState
+  detail?: OnlineTemplateDetail
+  detailError?: string | null
+}
+
+export interface OnlineTemplateProgress {
+  total: number
+  resolved: number
+  succeeded: number
+  failed: number
+}
+
+export interface OnlineTemplateLoadSession {
+  id: number
+  preferredSource: OnlineTemplateSource
+  resolvedSource?: OnlineTemplateSource
+  startedAt: number
+}
+
+export interface OnlineTemplateCacheEntry<T> {
+  schemaVersion: number
+  createdAt: number
+  expiresAt: number
+  data: T
+  version?: string
 }
 
 // 配置文件接口
