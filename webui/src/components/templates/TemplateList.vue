@@ -5,6 +5,7 @@
       :key="name"
       :name="name"
       :template="template"
+      @export="emit('export', name, template)"
       @edit="emit('edit', name, template)"
       @delete="emit('delete', name)"
     />
@@ -26,7 +27,7 @@ import { useI18n } from '../../utils/i18n'
 import type { Template } from '../../types'
 
 const props = defineProps<{ templates: Record<string, Template>; isSearching?: boolean }>()
-const emit = defineEmits<{ edit: [string, Template]; delete: [string] }>()
+const emit = defineEmits<{ export: [string, Template]; edit: [string, Template]; delete: [string] }>()
 
 const { t } = useI18n()
 

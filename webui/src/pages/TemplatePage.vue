@@ -17,6 +17,7 @@
       <TemplateList
         :templates="filteredTemplates"
         :is-searching="searchQuery.length > 0"
+        @export="handleExport"
         @edit="handleEdit"
         @delete="deleteTemplateConfirm"
       />
@@ -45,6 +46,7 @@ import { useConfigStore } from '../stores/config'
 import { useOnlineTemplatesStore } from '../stores/onlineTemplates'
 import { useI18n } from '../utils/i18n'
 import { useLazyMessageBox } from '../utils/elementPlus'
+import { copyTextToClipboard, stringifyTemplatesToToml } from '../utils/templateTransfer'
 import { toast } from 'kernelsu-alt'
 import type { Template } from '../types'
 
@@ -130,6 +132,19 @@ function handleEdit(name: string, template: Template) {
   editingTemplateName.value = name
   editingTemplate.value = template
   dialogVisible.value = true
+}
+
+async function handleExport(name: string, template: Template) {
+  try {
+    const content = stringifyTemplatesToToml({ [name]: template })
+    const copied = await copyTextToClipboard(content)
+    toast(
+      copied ? t('templates.messages.export_copy_success') : t('templates.messages.export_copy_failed')
+    )
+  } catch (error) {
+    console.error('Export template failed:', error)
+    toast(t('templates.messages.export_copy_failed'))
+  }
 }
 
 async function deleteTemplateConfirm(name: string) {

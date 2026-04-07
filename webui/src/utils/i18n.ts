@@ -66,6 +66,7 @@ export const messages = {
         online: '在线模板',
         new: '新建模板',
         transfer: '导入/导出',
+        export: '导出',
         add: '添加',
       },
       fields: {
@@ -125,6 +126,8 @@ export const messages = {
         name_required: '请输入模板名称',
         saved: '模板已保存',
         deleted: '模板已删除',
+        export_copy_success: '模板导出内容已复制',
+        export_copy_failed: '复制失败，请手动复制',
         pkg_exists: '该包名已添加',
       },
       labels: {
@@ -443,6 +446,7 @@ export const messages = {
         online: 'Online Templates',
         new: 'New Template',
         transfer: 'Import/Export',
+        export: 'Export',
         add: 'Add',
       },
       fields: {
@@ -502,6 +506,8 @@ export const messages = {
         name_required: 'Please enter template name',
         saved: 'Template saved',
         deleted: 'Template deleted',
+        export_copy_success: 'Template export copied',
+        export_copy_failed: 'Copy failed, please copy manually',
         pkg_exists: 'Package already added',
       },
       labels: {

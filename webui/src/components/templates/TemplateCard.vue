@@ -6,10 +6,31 @@
         <p class="template-device">{{ template.brand }} {{ template.model }}</p>
       </div>
       <div class="template-actions">
-        <button class="icon-btn" @click="emit('edit', name, template)">
+        <button
+          class="icon-btn"
+          type="button"
+          :title="t('templates.actions.export')"
+          :aria-label="t('templates.actions.export')"
+          @click="emit('export', name, template)"
+        >
+          <Copy :size="18" />
+        </button>
+        <button
+          class="icon-btn"
+          type="button"
+          :title="t('common.edit')"
+          :aria-label="t('common.edit')"
+          @click="emit('edit', name, template)"
+        >
           <Edit2 :size="18" />
         </button>
-        <button class="icon-btn danger" @click="emit('delete', name)">
+        <button
+          class="icon-btn danger"
+          type="button"
+          :title="t('common.delete')"
+          :aria-label="t('common.delete')"
+          @click="emit('delete', name)"
+        >
           <Trash2 :size="18" />
         </button>
       </div>
@@ -88,14 +109,14 @@
 </template>
 
 <script setup lang="ts">
-import { Edit2, Trash2 } from 'lucide-vue-next'
+import { Copy, Edit2, Trash2 } from 'lucide-vue-next'
 import { toRefs } from 'vue'
 import { useI18n } from '../../utils/i18n'
 import type { Template } from '../../types'
 
 const props = defineProps<{ name: string; template: Template }>()
 const { name, template } = toRefs(props)
-const emit = defineEmits<{ edit: [string, Template]; delete: [string] }>()
+const emit = defineEmits<{ export: [string, Template]; edit: [string, Template]; delete: [string] }>()
 
 const { t } = useI18n()
 </script>
