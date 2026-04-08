@@ -9,7 +9,8 @@ use std::{
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use fs_extra::{dir, file};
-use zip::{CompressionMethod, write::FileOptions};
+use time::{OffsetDateTime, UtcOffset};
+use zip::{CompressionMethod, DateTime, write::FileOptions};
 use zip_ext::zip_create_from_directory_with_options;
 
 #[derive(Parser)]
@@ -143,14 +144,38 @@ fn build(release: bool, verbose: bool) -> Result<()> {
     let build_type = if release { "release" } else { "debug" };
     let package_path = Path::new("output").join(format!("device_faker-({build_type}).zip"));
 
-    let options: FileOptions<'_, ()> = FileOptions::default()
-        .compression_method(CompressionMethod::Deflated)
-        .compression_level(Some(9));
-    zip_create_from_directory_with_options(&package_path, &temp_dir, |_| options).unwrap();
+    let local_offset = UtcOffset::current_local_offset().ok();
+    if local_offset.is_none() {
+        eprintln!("warning: failed to detect local timezone offset, zip entry times will use UTC");
+    }
+
+    zip_create_from_directory_with_options(&package_path, &temp_dir, |entry_path| {
+        let mut options: FileOptions<'_, ()> = FileOptions::default()
+            .compression_method(CompressionMethod::Deflated)
+            .compression_level(Some(9));
+
+        if let Some(modified_time) = zip_entry_modified_time(entry_path, local_offset) {
+            options = options.last_modified_time(modified_time);
+        }
+
+        options
+    })
+    .unwrap();
 
     println!("device_faker built successfully: {:?}", package_path);
 
     Ok(())
+}
+
+fn zip_entry_modified_time(entry_path: &Path, local_offset: Option<UtcOffset>) -> Option<DateTime> {
+    let modified = fs::metadata(entry_path).ok()?.modified().ok()?;
+    let modified = OffsetDateTime::from(modified);
+    let modified = match local_offset {
+        Some(offset) => modified.to_offset(offset),
+        None => modified,
+    };
+
+    DateTime::try_from(modified).ok()
 }
 
 fn check(release: bool, verbose: bool) -> Result<()> {
