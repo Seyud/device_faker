@@ -1,16 +1,16 @@
 <template>
   <div class="template-list">
     <TemplateCard
-      v-for="(template, name) in templates"
-      :key="name"
-      :name="name"
-      :template="template"
-      @export="emit('export', name, template)"
-      @edit="emit('edit', name, template)"
-      @delete="emit('delete', name)"
+      v-for="entry in entries"
+      :key="entry.name"
+      :name="entry.name"
+      :template="entry.template"
+      @export="emit('export', entry.name, entry.template)"
+      @edit="emit('edit', entry.name, entry.template)"
+      @delete="emit('delete', entry.name)"
     />
 
-    <div v-if="Object.keys(templates).length === 0" class="empty-state">
+    <div v-if="entries.length === 0" class="empty-state">
       <FileText :size="64" class="empty-icon" />
       <p class="empty-text">{{ emptyText }}</p>
       <p v-if="isSearching" class="empty-hint">{{ t('templates.search.no_results') }}</p>
@@ -26,7 +26,12 @@ import TemplateCard from './TemplateCard.vue'
 import { useI18n } from '../../utils/i18n'
 import type { Template } from '../../types'
 
-const props = defineProps<{ templates: Record<string, Template>; isSearching?: boolean }>()
+interface TemplateListEntry {
+  name: string
+  template: Template
+}
+
+const props = defineProps<{ entries: TemplateListEntry[]; isSearching?: boolean }>()
 const emit = defineEmits<{
   export: [string, Template]
   edit: [string, Template]
@@ -35,10 +40,10 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 
-const templates = computed(() => props.templates)
+const entries = computed(() => props.entries)
 
 const emptyText = computed(() => {
-  if (props.isSearching && Object.keys(props.templates).length === 0) {
+  if (props.isSearching && props.entries.length === 0) {
     return t('templates.search.no_results')
   }
   return t('templates.empty.title')

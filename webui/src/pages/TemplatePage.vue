@@ -15,7 +15,7 @@
       />
 
       <TemplateList
-        :templates="filteredTemplates"
+        :entries="filteredTemplates"
         :is-searching="searchQuery.length > 0"
         @export="handleExport"
         @edit="handleEdit"
@@ -64,7 +64,7 @@ const getMessageBox = useLazyMessageBox()
 
 const searchQuery = ref('')
 
-const allTemplates = computed(() => configStore.getTemplates())
+const allTemplates = computed(() => configStore.templateEntries)
 
 const filteredTemplates = computed(() => {
   if (!searchQuery.value.trim()) {
@@ -73,28 +73,20 @@ const filteredTemplates = computed(() => {
 
   const query = searchQuery.value.toLowerCase().trim()
 
-  return Object.entries(allTemplates.value).reduce<Record<string, Template>>(
-    (acc, [name, template]) => {
-      const searchFields = [
-        name,
-        template.brand || '',
-        template.model || '',
-        template.build_id || '',
-        template.device || '',
-        template.manufacturer || '',
-        template.product || '',
-      ]
+  return allTemplates.value.filter(({ name, template }) => {
+    const searchFields = [
+      name,
+      template.brand || '',
+      template.model || '',
+      template.build_id || '',
+      template.device || '',
+      template.manufacturer || '',
+      template.product || '',
+    ]
 
-      const matches = searchFields.some((field) => field.toLowerCase().includes(query))
-
-      if (matches) {
-        acc[name] = template
-      }
-
-      return acc
-    },
-    {}
-  )
+    const matches = searchFields.some((field) => field.toLowerCase().includes(query))
+    return matches
+  })
 })
 
 function handleSearch(query: string) {

@@ -121,6 +121,9 @@ export const messages = {
         new_title: '新建模板',
         delete_title: '确认删除',
         delete_confirm: '确定要删除模板 "{name}" 吗？',
+        rename_overwrite_title: '覆盖现有模板',
+        rename_overwrite_confirm:
+          '要将模板 "{oldName}" 重命名为 "{newName}"，目标名称已存在，是否覆盖？',
       },
       messages: {
         name_required: '请输入模板名称',
@@ -501,6 +504,9 @@ export const messages = {
         new_title: 'New Template',
         delete_title: 'Delete Confirmation',
         delete_confirm: 'Are you sure to delete template "{name}"?',
+        rename_overwrite_title: 'Overwrite Existing Template',
+        rename_overwrite_confirm:
+          'Rename template "{oldName}" to "{newName}" and overwrite the existing target?',
       },
       messages: {
         name_required: 'Please enter template name',

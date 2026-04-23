@@ -12,11 +12,7 @@
   >
     <el-form :model="formData" label-width="120px" label-position="top">
       <el-form-item :label="t('templates.fields.name')">
-        <el-input
-          v-model="formData.name"
-          :disabled="isEditing"
-          :placeholder="t('templates.placeholders.name')"
-        />
+        <el-input v-model="formData.name" :placeholder="t('templates.placeholders.name')" />
       </el-form-item>
 
       <el-form-item :label="t('templates.fields.manufacturer')">
@@ -177,6 +173,7 @@ import { computed, ref, watch } from 'vue'
 import { useConfigStore } from '../../stores/config'
 import { useAppsStore } from '../../stores/apps'
 import { useI18n } from '../../utils/i18n'
+import { useLazyMessageBox } from '../../utils/elementPlus'
 import { toast } from 'kernelsu-alt'
 import type { Template } from '../../types'
 
@@ -193,6 +190,7 @@ const emit = defineEmits<{ 'update:modelValue': [boolean]; saved: [string] }>()
 const { t } = useI18n()
 const configStore = useConfigStore()
 const appsStore = useAppsStore()
+const getMessageBox = useLazyMessageBox()
 
 const installedApps = computed(() => appsStore.installedApps)
 const visible = computed({
@@ -310,11 +308,34 @@ function getAppName(packageName: string): string {
   return app ? app.appName : ''
 }
 
+async function confirmRenameOverwrite(oldName: string, newName: string) {
+  const messageBox = await getMessageBox()
+  await messageBox.confirm(
+    t('templates.dialog.rename_overwrite_confirm', { oldName, newName }),
+    t('templates.dialog.rename_overwrite_title'),
+    {
+      confirmButtonText: t('common.confirm'),
+      cancelButtonText: t('common.cancel'),
+      type: 'warning',
+      appendTo: 'body',
+    }
+  )
+}
+
 async function saveTemplate() {
-  if (!formData.value.name) {
+  const templateName = formData.value.name.trim()
+
+  if (!templateName) {
     toast(t('templates.messages.name_required'))
     return
   }
+
+  formData.value.name = templateName
+
+  const originalTemplateName = props.templateName?.trim() || ''
+  const isRenaming =
+    props.isEditing && originalTemplateName.length > 0 && originalTemplateName !== templateName
+  let overwriteRenameTarget = false
 
   const template: Template = {
     ...(props.templateData || {}),
@@ -383,14 +404,32 @@ async function saveTemplate() {
     delete template.packages
   }
 
-  configStore.setTemplate(formData.value.name, template, { replace: true })
-
   try {
+    if (
+      isRenaming &&
+      Object.prototype.hasOwnProperty.call(configStore.getTemplates(), templateName)
+    ) {
+      await confirmRenameOverwrite(originalTemplateName, templateName)
+      overwriteRenameTarget = true
+    }
+
+    if (isRenaming) {
+      configStore.renameTemplate(originalTemplateName, templateName, template, {
+        overwrite: overwriteRenameTarget,
+      })
+    } else {
+      configStore.setTemplate(templateName, template, { replace: true })
+    }
+
     await configStore.saveConfig()
     toast(t('templates.messages.saved'))
-    emit('saved', formData.value.name)
+    emit('saved', templateName)
     visible.value = false
   } catch (e) {
+    if (e === 'cancel') {
+      return
+    }
+
     console.error('Save template failed:', e)
     const errorMessage = e instanceof Error ? e.message : String(e)
     toast(`${t('common.failed')}: ${errorMessage}`)
