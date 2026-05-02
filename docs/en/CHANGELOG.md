@@ -1,5 +1,31 @@
 # 📝 Changelog
 
+## ⬆️[v1.3.5 → v1.4.0] - 2026-05-02
+
+### 🆕 New Features
+- 🖥️ WebUI apps page supports system app display toggle
+- 🌐 WebUI online template library added GitHub source
+- 🏷️ Added build_id and Build.ID camouflage support for all three modes
+- 📥 WebUI template page added import/export tools and local template export
+- 📤 WebUI template card added export button
+- 👆 WebUI supports swipe gesture to switch between pages
+- ✏️ WebUI template page supports editing existing template names
+
+### 🐛 Bug Fixes
+- 🧹 Fixed residual old values when clearing partial fields in WebUI template editor
+- 🔄 Fixed state sync issue of custom property camouflage session when switching between foreground and background in resetprop mode
+
+### ⚡ Improvements
+- 🔗 Updated to adapt jni 0.22 API
+- ⚡ Significantly optimized WebUI page switching performance
+- ⚡ Optimized WebUI app list loading performance
+- 🏗️ Refactored the entire WebUI online template library pipeline
+- 📏 Used cutting-edge Web technology pretext to optimize text height measurement in online template virtual list
+- 🚀 Optimized WebUI first screen page switch responsiveness
+- 🎬 Added WebUI page switching animation
+- 🦀 Refactored external resetprop binary call into built-in Rust library (by @Tools-cx-app)
+- 💾 Improved configuration file backup format
+
 ## ⬆️[v1.3.0 → v1.3.5] - 2026-03-20
 
 ### 🆕 New Features

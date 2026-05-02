@@ -56,15 +56,6 @@ product = "V2505A"
 fingerprint = ""
 packages = [ "com.tencent.tmgp.sgame", "com.tencent.tmgp.codev" ]
 
-[templates."红魔平板3"]
-manufacturer = "NUBIA"
-brand = "NUBIA"
-model = "NP05J"
-device = "NP05J"
-product = "NP05J"
-fingerprint = ""
-packages = [ "com.tencent.tmgp.cf" ]
-
 # ============================================================
 # 应用配置
 # ============================================================
