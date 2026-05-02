@@ -56,8 +56,7 @@ impl ZygiskModule for MyModule {
         _env: EnvUnowned,
         _args: &<V4 as ZygiskRaw>::AppSpecializeArgs,
     ) {
-        let is_full_mode = *IS_FULL_MODE.lock().unwrap();
-        if !is_full_mode {
+        if !IS_FULL_MODE.load(std::sync::atomic::Ordering::Relaxed) {
             api.set_option(ZygiskOption::DlCloseModuleLibrary);
         }
     }
@@ -187,7 +186,7 @@ impl MyModule {
 
     fn apply_lite_mode(api: &mut ZygiskApi<V4>, debug: bool) -> anyhow::Result<()> {
         *FAKE_PROPS.lock().unwrap() = None;
-        *IS_FULL_MODE.lock().unwrap() = false;
+        IS_FULL_MODE.store(false, std::sync::atomic::Ordering::Relaxed);
         if debug {
             info!("Lite mode: only Build fields hooked, unloading module");
         }
@@ -211,7 +210,7 @@ impl MyModule {
         }
 
         *FAKE_PROPS.lock().unwrap() = Some(prop_map);
-        *IS_FULL_MODE.lock().unwrap() = true;
+        IS_FULL_MODE.store(true, std::sync::atomic::Ordering::Relaxed);
         hook_system_properties(api, env)?;
         hook_native_property_get(api)?;
 
@@ -241,7 +240,7 @@ impl MyModule {
         }
 
         *FAKE_PROPS.lock().unwrap() = None;
-        *IS_FULL_MODE.lock().unwrap() = false;
+        IS_FULL_MODE.store(false, std::sync::atomic::Ordering::Relaxed);
         api.set_option(ZygiskOption::DlCloseModuleLibrary);
         Ok(())
     }
