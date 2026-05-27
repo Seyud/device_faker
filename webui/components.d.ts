@@ -15,6 +15,7 @@ declare module 'vue' {
     AppFilters: typeof import('./src/components/apps/AppFilters.vue')['default']
     AppList: typeof import('./src/components/apps/AppList.vue')['default']
     AppsPageSkeleton: typeof import('./src/components/apps/AppsPageSkeleton.vue')['default']
+    DeviceFakerFormFields: typeof import('./src/components/shared/DeviceFakerFormFields.vue')['default']
     ElAutocomplete: typeof import('element-plus/es')['ElAutocomplete']
     ElButton: typeof import('element-plus/es')['ElButton']
     ElCheckbox: typeof import('element-plus/es')['ElCheckbox']

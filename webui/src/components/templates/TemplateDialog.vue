@@ -12,153 +12,52 @@
   >
     <el-form :model="formData" label-width="120px" label-position="top">
       <el-form-item :label="t('templates.fields.name')">
-        <el-input v-model="formData.name" :placeholder="t('templates.placeholders.name')" />
+        <el-input v-model="templateNameInput" :placeholder="t('templates.placeholders.name')" />
       </el-form-item>
 
-      <el-form-item :label="t('templates.fields.manufacturer')">
-        <el-input
-          v-model="formData.manufacturer"
-          :placeholder="t('templates.placeholders.manufacturer')"
-        />
-      </el-form-item>
-
-      <el-form-item :label="t('templates.fields.brand')">
-        <el-input v-model="formData.brand" :placeholder="t('templates.placeholders.brand')" />
-      </el-form-item>
-
-      <el-form-item :label="t('templates.fields.model')">
-        <el-input v-model="formData.model" :placeholder="t('templates.placeholders.model')" />
-      </el-form-item>
-
-      <el-form-item :label="t('templates.fields.device')">
-        <el-input v-model="formData.device" :placeholder="t('templates.placeholders.device')" />
-      </el-form-item>
-
-      <el-form-item :label="t('templates.fields.product')">
-        <el-input v-model="formData.product" :placeholder="t('templates.placeholders.product')" />
-      </el-form-item>
-
-      <el-form-item :label="t('templates.fields.name_field')">
-        <el-input
-          v-model="formData.name_field"
-          :placeholder="t('templates.placeholders.name_field')"
-        />
-      </el-form-item>
-
-      <el-form-item :label="t('templates.fields.market_name')">
-        <el-input
-          v-model="formData.marketname"
-          :placeholder="t('templates.placeholders.market_name')"
-        />
-      </el-form-item>
-
-      <el-form-item :label="t('templates.fields.fingerprint')">
-        <el-input
-          v-model="formData.fingerprint"
-          type="textarea"
-          :rows="3"
-          :placeholder="t('templates.placeholders.fingerprint')"
-        />
-      </el-form-item>
-
-      <el-collapse>
-        <el-collapse-item :title="t('templates.fields.system')" name="system">
-          <el-form-item :label="t('templates.fields.build_id')">
-            <el-input
-              v-model="formData.build_id"
-              :placeholder="t('templates.placeholders.build_id')"
-            />
-          </el-form-item>
-
-          <el-form-item :label="t('templates.fields.android_version')">
-            <el-input
-              v-model="formData.android_version"
-              :placeholder="t('templates.placeholders.android_version')"
-            />
-          </el-form-item>
-
-          <el-form-item :label="t('templates.fields.sdk_int')">
-            <el-input
-              v-model="formData.sdk_int"
-              type="number"
-              :placeholder="t('templates.placeholders.sdk_int')"
-            />
-          </el-form-item>
-        </el-collapse-item>
-      </el-collapse>
-
-      <el-form-item :label="t('templates.fields.mode')">
-        <el-select
-          v-model="formData.mode"
-          :placeholder="t('templates.placeholders.mode')"
-          clearable
-          popper-class="mode-select-popper"
-        >
-          <el-option :label="t('templates.options.mode_lite')" value="lite" />
-          <el-option :label="t('templates.options.mode_full')" value="full" />
-          <el-option :label="t('templates.options.mode_resetprop')" value="resetprop" />
-        </el-select>
-      </el-form-item>
-
-      <el-form-item
-        v-if="
-          formData.mode === 'full' || (!formData.mode && configStore.config.default_mode === 'full')
-        "
-        :label="t('templates.fields.characteristics')"
-      >
-        <el-input
-          v-model="formData.characteristics"
-          :placeholder="t('templates.placeholders.characteristics')"
-        />
-      </el-form-item>
-
-      <el-form-item :label="t('templates.fields.force_denylist_unmount')">
-        <el-select v-model="formData.force_denylist_unmount" :placeholder="t('common.default')">
-          <el-option :label="t('common.default')" :value="undefined" />
-          <el-option :label="t('common.enabled')" :value="true" />
-          <el-option :label="t('common.disabled')" :value="false" />
-        </el-select>
-      </el-form-item>
-
-      <el-form-item :label="t('templates.fields.packages')">
-        <div class="package-manager">
-          <div :class="['package-input-wrapper', { 'stacked-layout': locale === 'en' }]">
-            <el-autocomplete
-              v-model="packageInput"
-              :fetch-suggestions="searchPackages"
-              :placeholder="t('templates.placeholders.packages')"
-              clearable
-              class="package-autocomplete"
-              @keyup.enter="addPackage"
-            >
-              <template #default="{ item }">
-                <div class="package-suggestion">
-                  <div class="app-info">
-                    <div class="app-name">{{ item.appName }}</div>
-                    <div class="package-name">{{ item.packageName }}</div>
-                  </div>
-                </div>
-              </template>
-            </el-autocomplete>
-            <el-button type="primary" :disabled="!packageInput" @click="addPackage">
-              {{ t('templates.actions.add') }}
-            </el-button>
-          </div>
-
-          <div v-if="formData.packages.length > 0" class="package-list">
-            <div v-for="(pkg, index) in formData.packages" :key="pkg" class="package-item">
-              <div class="package-info">
-                <span class="package-name-text">{{ pkg }}</span>
-                <span v-if="getAppName(pkg)" class="app-name-text">{{ getAppName(pkg) }}</span>
+      <DeviceFakerFormFields>
+        <template #packages>
+          <el-form-item :label="t('templates.fields.packages')">
+            <div class="package-manager">
+              <div :class="['package-input-wrapper', { 'stacked-layout': locale === 'en' }]">
+                <el-autocomplete
+                  v-model="packageInput"
+                  :fetch-suggestions="searchPackages"
+                  :placeholder="t('templates.placeholders.packages')"
+                  clearable
+                  class="package-autocomplete"
+                  @keyup.enter="addPackage"
+                >
+                  <template #default="{ item }">
+                    <div class="package-suggestion">
+                      <div class="app-info">
+                        <div class="app-name">{{ item.appName }}</div>
+                        <div class="package-name">{{ item.packageName }}</div>
+                      </div>
+                    </div>
+                  </template>
+                </el-autocomplete>
+                <el-button type="primary" :disabled="!packageInput" @click="addPackage">
+                  {{ t('templates.actions.add') }}
+                </el-button>
               </div>
-              <el-button type="danger" size="small" circle @click="removePackage(index)">
-                ×
-              </el-button>
+
+              <div v-if="formData.packages.length > 0" class="package-list">
+                <div v-for="(pkg, index) in formData.packages" :key="pkg" class="package-item">
+                  <div class="package-info">
+                    <span class="package-name-text">{{ pkg }}</span>
+                    <span v-if="getAppName(pkg)" class="app-name-text">{{ getAppName(pkg) }}</span>
+                  </div>
+                  <el-button type="danger" size="small" circle @click="removePackage(index)">
+                    ×
+                  </el-button>
+                </div>
+              </div>
+              <div v-else class="package-list-empty">{{ t('templates.empty.packages') }}</div>
             </div>
-          </div>
-          <div v-else class="package-list-empty">{{ t('templates.empty.packages') }}</div>
-        </div>
-      </el-form-item>
+          </el-form-item>
+        </template>
+      </DeviceFakerFormFields>
     </el-form>
 
     <template #footer>
@@ -176,6 +75,8 @@ import { useI18n } from '../../utils/i18n'
 import { useLazyMessageBox } from '../../utils/elementPlus'
 import { toast } from 'kernelsu-alt'
 import type { Template } from '../../types'
+import { provideDeviceFakerForm } from '../../composables/useDeviceFakerForm'
+import DeviceFakerFormFields from '../shared/DeviceFakerFormFields.vue'
 
 const props = defineProps<{
   modelValue: boolean
@@ -199,73 +100,9 @@ const visible = computed({
 })
 
 const packageInput = ref('')
-const formData = ref({
-  name: '',
-  manufacturer: '',
-  brand: '',
-  model: '',
-  device: '',
-  product: '',
-  name_field: '',
-  marketname: '',
-  fingerprint: '',
-  build_id: '',
-  android_version: '',
-  sdk_int: '',
-  characteristics: '',
-  force_denylist_unmount: undefined as boolean | undefined,
-  mode: '',
-  packages: [] as string[],
-})
+const templateNameInput = ref('')
 
-function resetForm() {
-  packageInput.value = ''
-  formData.value = {
-    name: '',
-    manufacturer: '',
-    brand: '',
-    model: '',
-    device: '',
-    product: '',
-    name_field: '',
-    marketname: '',
-    fingerprint: '',
-    build_id: '',
-    android_version: '',
-    sdk_int: '',
-    characteristics: '',
-    force_denylist_unmount: undefined,
-    mode: '',
-    packages: [],
-  }
-}
-
-function fillFormFromTemplate() {
-  if (!props.templateData || !props.templateName) {
-    resetForm()
-    return
-  }
-
-  packageInput.value = ''
-  formData.value = {
-    name: props.templateName,
-    manufacturer: props.templateData.manufacturer || '',
-    brand: props.templateData.brand || '',
-    model: props.templateData.model || '',
-    device: props.templateData.device || '',
-    product: props.templateData.product || '',
-    name_field: props.templateData.name || '',
-    marketname: props.templateData.marketname || '',
-    fingerprint: props.templateData.fingerprint || '',
-    build_id: props.templateData.build_id || '',
-    android_version: props.templateData.android_version || '',
-    sdk_int: props.templateData.sdk_int ? String(props.templateData.sdk_int) : '',
-    characteristics: props.templateData.characteristics || '',
-    force_denylist_unmount: props.templateData.force_denylist_unmount,
-    mode: props.templateData.mode || '',
-    packages: props.templateData.packages || [],
-  }
-}
+const { formData, resetForm, fillFromTemplate, toTemplate } = provideDeviceFakerForm()
 
 function searchPackages(
   queryString: string,
@@ -323,107 +160,39 @@ async function confirmRenameOverwrite(oldName: string, newName: string) {
 }
 
 async function saveTemplate() {
-  const templateName = formData.value.name.trim()
+  const name = templateNameInput.value.trim()
 
-  if (!templateName) {
+  if (!name) {
     toast(t('templates.messages.name_required'))
     return
   }
 
-  formData.value.name = templateName
+  templateNameInput.value = name
 
   const originalTemplateName = props.templateName?.trim() || ''
   const isRenaming =
-    props.isEditing && originalTemplateName.length > 0 && originalTemplateName !== templateName
+    props.isEditing && originalTemplateName.length > 0 && originalTemplateName !== name
   let overwriteRenameTarget = false
 
-  const template: Template = {
-    ...(props.templateData || {}),
-    manufacturer: formData.value.manufacturer,
-    brand: formData.value.brand,
-    model: formData.value.model,
-    device: formData.value.device,
-    product: formData.value.product,
-    fingerprint: formData.value.fingerprint,
-  }
-
-  if (formData.value.android_version) {
-    template.android_version = formData.value.android_version
-  } else {
-    delete template.android_version
-  }
-
-  if (formData.value.build_id) {
-    template.build_id = formData.value.build_id
-  } else {
-    delete template.build_id
-  }
-
-  if (formData.value.sdk_int) {
-    const sdkInt = Number(formData.value.sdk_int)
-    if (!isNaN(sdkInt)) {
-      template.sdk_int = sdkInt
-    } else {
-      delete template.sdk_int
-    }
-  } else {
-    delete template.sdk_int
-  }
-
-  if (formData.value.name_field) {
-    template.name = formData.value.name_field
-  } else {
-    delete template.name
-  }
-
-  if (formData.value.marketname) {
-    template.marketname = formData.value.marketname
-  } else {
-    delete template.marketname
-  }
-
-  if (formData.value.characteristics) {
-    template.characteristics = formData.value.characteristics
-  } else {
-    delete template.characteristics
-  }
-
-  if (formData.value.force_denylist_unmount !== undefined) {
-    template.force_denylist_unmount = formData.value.force_denylist_unmount
-  }
-
-  if (formData.value.mode) {
-    template.mode = formData.value.mode as 'lite' | 'full' | 'resetprop'
-  } else {
-    delete template.mode
-  }
-
-  if (formData.value.packages.length > 0) {
-    template.packages = formData.value.packages
-  } else {
-    delete template.packages
-  }
+  const template = toTemplate(props.templateData || undefined)
 
   try {
-    if (
-      isRenaming &&
-      Object.prototype.hasOwnProperty.call(configStore.getTemplates(), templateName)
-    ) {
-      await confirmRenameOverwrite(originalTemplateName, templateName)
+    if (isRenaming && Object.prototype.hasOwnProperty.call(configStore.getTemplates(), name)) {
+      await confirmRenameOverwrite(originalTemplateName, name)
       overwriteRenameTarget = true
     }
 
     if (isRenaming) {
-      configStore.renameTemplate(originalTemplateName, templateName, template, {
+      configStore.renameTemplate(originalTemplateName, name, template, {
         overwrite: overwriteRenameTarget,
       })
     } else {
-      configStore.setTemplate(templateName, template, { replace: true })
+      configStore.setTemplate(name, template, { replace: true })
     }
 
     await configStore.saveConfig()
     toast(t('templates.messages.saved'))
-    emit('saved', templateName)
+    emit('saved', name)
     visible.value = false
   } catch (e) {
     if (e === 'cancel') {
@@ -441,10 +210,13 @@ watch(
   ([dialogVisible, editing]) => {
     if (!dialogVisible) return
 
+    packageInput.value = ''
     if (editing) {
-      fillFormFromTemplate()
+      fillFromTemplate(props.templateData!)
+      templateNameInput.value = props.templateName || ''
     } else {
       resetForm()
+      templateNameInput.value = ''
     }
   },
   { immediate: true }
@@ -472,7 +244,6 @@ watch(
   width: 100%;
 }
 
-/* 确保输入框和按钮对齐 */
 .package-input-wrapper :deep(.el-input__wrapper) {
   height: 32px;
 }
@@ -485,7 +256,6 @@ watch(
   justify-content: center;
 }
 
-/* Make add button full width in stacked layout */
 .package-input-wrapper.stacked-layout .el-button {
   width: 100%;
 }
@@ -682,18 +452,5 @@ watch(
     -webkit-backdrop-filter: blur(12px) saturate(120%) !important;
     background-color: rgba(0, 0, 0, 0.4) !important;
   }
-}
-
-.mode-select-popper .el-select-dropdown__item {
-  white-space: pre-line;
-  line-height: 1.4;
-  height: auto;
-  padding-top: 8px;
-  padding-bottom: 8px;
-  word-break: break-word;
-}
-
-.mode-select-popper .el-select-dropdown__item span {
-  white-space: pre-line;
 }
 </style>

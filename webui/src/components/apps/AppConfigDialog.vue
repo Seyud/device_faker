@@ -76,118 +76,8 @@
 
     <!-- 自定义配置界面 -->
     <div v-if="activeTab === 'custom'" class="custom-config">
-      <el-form :model="customFormData" label-width="120px" label-position="top">
-        <el-form-item :label="t('templates.fields.manufacturer')">
-          <el-input
-            v-model="customFormData.manufacturer"
-            :placeholder="t('templates.placeholders.manufacturer')"
-          />
-        </el-form-item>
-        <el-form-item :label="t('templates.fields.brand')">
-          <el-input
-            v-model="customFormData.brand"
-            :placeholder="t('templates.placeholders.brand')"
-          />
-        </el-form-item>
-        <el-form-item :label="t('templates.fields.model')">
-          <el-input
-            v-model="customFormData.model"
-            :placeholder="t('templates.placeholders.model')"
-          />
-        </el-form-item>
-        <el-form-item :label="t('templates.fields.device')">
-          <el-input
-            v-model="customFormData.device"
-            :placeholder="t('templates.placeholders.device')"
-          />
-        </el-form-item>
-        <el-form-item :label="t('templates.fields.product')">
-          <el-input
-            v-model="customFormData.product"
-            :placeholder="t('templates.placeholders.product')"
-          />
-        </el-form-item>
-        <el-form-item :label="t('templates.fields.name_field')">
-          <el-input
-            v-model="customFormData.name"
-            :placeholder="t('templates.placeholders.name_field')"
-          />
-        </el-form-item>
-        <el-form-item :label="t('templates.fields.market_name')">
-          <el-input
-            v-model="customFormData.marketname"
-            :placeholder="t('templates.placeholders.market_name')"
-          />
-        </el-form-item>
-        <el-form-item :label="t('templates.fields.fingerprint')">
-          <el-input
-            v-model="customFormData.fingerprint"
-            type="textarea"
-            :rows="3"
-            :placeholder="t('templates.placeholders.fingerprint')"
-          />
-        </el-form-item>
-        <el-collapse>
-          <el-collapse-item :title="t('templates.fields.system')" name="system">
-            <el-form-item :label="t('templates.fields.build_id')">
-              <el-input
-                v-model="customFormData.build_id"
-                :placeholder="t('templates.placeholders.build_id')"
-              />
-            </el-form-item>
-            <el-form-item :label="t('templates.fields.android_version')">
-              <el-input
-                v-model="customFormData.android_version"
-                :placeholder="t('templates.placeholders.android_version')"
-              />
-            </el-form-item>
-            <el-form-item :label="t('templates.fields.sdk_int')">
-              <el-input
-                v-model="customFormData.sdk_int"
-                type="number"
-                :placeholder="t('templates.placeholders.sdk_int')"
-              />
-            </el-form-item>
-          </el-collapse-item>
-        </el-collapse>
-        <el-form-item :label="t('templates.fields.mode')">
-          <el-select
-            v-model="customFormData.mode"
-            :placeholder="t('templates.placeholders.mode')"
-            clearable
-            popper-class="mode-select-popper"
-            style="width: 100%"
-          >
-            <el-option :label="t('templates.options.mode_lite')" value="lite" />
-            <el-option :label="t('templates.options.mode_full')" value="full" />
-            <el-option :label="t('templates.options.mode_resetprop')" value="resetprop" />
-          </el-select>
-        </el-form-item>
-
-        <el-form-item
-          v-if="
-            customFormData.mode === 'full' ||
-            (!customFormData.mode && configStore.config.default_mode === 'full')
-          "
-          :label="t('templates.fields.characteristics')"
-        >
-          <el-input
-            v-model="customFormData.characteristics"
-            :placeholder="t('templates.placeholders.characteristics')"
-          />
-        </el-form-item>
-
-        <el-form-item :label="t('templates.fields.force_denylist_unmount')">
-          <el-select
-            v-model="customFormData.force_denylist_unmount"
-            :placeholder="t('common.default')"
-            style="width: 100%"
-          >
-            <el-option :label="t('common.default')" :value="undefined" />
-            <el-option :label="t('common.enabled')" :value="true" />
-            <el-option :label="t('common.disabled')" :value="false" />
-          </el-select>
-        </el-form-item>
+      <el-form :model="formData" label-width="120px" label-position="top">
+        <DeviceFakerFormFields />
       </el-form>
 
       <!-- 自定义配置操作按钮 -->
@@ -211,6 +101,8 @@ import { useConfigStore } from '../../stores/config'
 import { useI18n } from '../../utils/i18n'
 import { toast } from 'kernelsu-alt'
 import type { InstalledApp, AppConfig } from '../../types'
+import { provideDeviceFakerForm } from '../../composables/useDeviceFakerForm'
+import DeviceFakerFormFields from '../shared/DeviceFakerFormFields.vue'
 
 interface TemplateOption {
   name: string
@@ -234,38 +126,18 @@ const visible = computed({
   set: (val: boolean) => emit('update:modelValue', val),
 })
 
-// 当前激活的标签页
 const activeTab = ref<'template' | 'custom'>('custom')
 
-// 配置状态追踪
 const hasCustomConfig = ref(false)
 const hasTemplateConfig = ref(false)
 
-// 原始配置状态（用于检测变更）
 const originalCustomConfig = ref<AppConfig | null>(null)
 const originalTemplateName = ref<string | null>(null)
 
-// 模板配置数据
 const selectedTemplate = ref('')
 const templateSearch = ref('')
 
-// 自定义配置数据
-const customFormData = ref({
-  manufacturer: '',
-  brand: '',
-  model: '',
-  device: '',
-  product: '',
-  name: '',
-  marketname: '',
-  fingerprint: '',
-  build_id: '',
-  android_version: '',
-  sdk_int: '',
-  characteristics: '',
-  force_denylist_unmount: undefined as boolean | undefined,
-  mode: undefined as 'lite' | 'full' | 'resetprop' | undefined,
-})
+const { formData, resetForm, fillFromAppConfig, toAppConfig } = provideDeviceFakerForm()
 
 const dialogTitle = computed(() =>
   t('apps.dialog.config_title', { name: props.app?.appName || '' })
@@ -312,11 +184,6 @@ const templateNoDataText = computed(() =>
 )
 const templateNoMatchText = computed(() => t('apps.dialog.search_no_result'))
 
-/**
- * 处理配置开关切换
- * @param type - 配置类型
- * @param enabled - 是否启用
- */
 function handleConfigToggle(type: 'custom' | 'template', enabled: boolean) {
   if (type === 'custom') {
     hasCustomConfig.value = enabled
@@ -327,7 +194,6 @@ function handleConfigToggle(type: 'custom' | 'template', enabled: boolean) {
     hasTemplateConfig.value = enabled
     if (enabled) {
       activeTab.value = 'template'
-      // 如果没有选择模板，默认选择第一个
       if (!selectedTemplate.value && templateOptions.value.length > 0) {
         selectedTemplate.value = templateOptions.value[0].name
       }
@@ -337,42 +203,22 @@ function handleConfigToggle(type: 'custom' | 'template', enabled: boolean) {
   }
 }
 
-/**
- * 从现有配置同步数据到表单
- */
 function syncFromExistingConfig() {
   if (!props.app) return
 
   templateSearch.value = ''
 
-  // 检查自定义配置
   const appConfig = configStore.getApps().find((a) => a.package === props.app!.packageName)
   if (appConfig) {
     hasCustomConfig.value = true
     originalCustomConfig.value = { ...appConfig }
-    customFormData.value = {
-      manufacturer: appConfig.manufacturer || '',
-      brand: appConfig.brand || '',
-      model: appConfig.model || '',
-      device: appConfig.device || '',
-      product: appConfig.product || '',
-      name: appConfig.name || '',
-      marketname: appConfig.marketname || '',
-      fingerprint: appConfig.fingerprint || '',
-      build_id: appConfig.build_id || '',
-      android_version: appConfig.android_version || '',
-      sdk_int: appConfig.sdk_int ? String(appConfig.sdk_int) : '',
-      characteristics: appConfig.characteristics || '',
-      force_denylist_unmount: appConfig.force_denylist_unmount,
-      mode: appConfig.mode as 'lite' | 'full' | 'resetprop' | undefined,
-    }
+    fillFromAppConfig(appConfig)
   } else {
     hasCustomConfig.value = false
     originalCustomConfig.value = null
-    resetCustomFormData()
+    resetForm()
   }
 
-  // 检查模板配置
   let foundTemplateName: string | null = null
   for (const [name, template] of Object.entries(templates.value)) {
     if (template.packages?.includes(props.app.packageName)) {
@@ -391,49 +237,22 @@ function syncFromExistingConfig() {
     selectedTemplate.value = ''
   }
 
-  // 决定默认激活的标签页：优先显示自定义配置（因为优先级更高）
   if (hasCustomConfig.value) {
     activeTab.value = 'custom'
   } else if (hasTemplateConfig.value) {
     activeTab.value = 'template'
   } else {
-    // 都没有配置时，默认显示自定义配置界面
     activeTab.value = 'custom'
   }
 }
 
-/**
- * 重置自定义配置表单数据
- */
-function resetCustomFormData() {
-  customFormData.value = {
-    manufacturer: '',
-    brand: '',
-    model: '',
-    device: '',
-    product: '',
-    name: '',
-    marketname: '',
-    fingerprint: '',
-    build_id: '',
-    android_version: '',
-    sdk_int: '',
-    characteristics: '',
-    force_denylist_unmount: undefined,
-    mode: undefined,
-  }
-}
-
-/**
- * 移除自定义配置
- */
 async function removeCustomConfig() {
   if (!props.app) return
 
   configStore.deleteApp(props.app.packageName)
   hasCustomConfig.value = false
   originalCustomConfig.value = null
-  resetCustomFormData()
+  resetForm()
 
   try {
     await configStore.saveConfig()
@@ -443,13 +262,9 @@ async function removeCustomConfig() {
   }
 }
 
-/**
- * 移除模板配置
- */
 async function removeTemplateConfig() {
   if (!props.app) return
 
-  // 从所有模板中移除该应用
   const allTemplates = configStore.getTemplates()
   for (const [name, template] of Object.entries(allTemplates)) {
     if (template.packages?.includes(props.app.packageName)) {
@@ -470,20 +285,15 @@ async function removeTemplateConfig() {
   }
 }
 
-/**
- * 保存应用配置
- */
 async function saveAppConfig() {
   if (!props.app) return
 
-  // 保存模板配置
   if (hasTemplateConfig.value) {
     if (!selectedTemplate.value) {
       toast(t('apps.messages.select_template'))
       return
     }
 
-    // 如果模板选择发生变化，先从原模板中移除
     if (originalTemplateName.value && originalTemplateName.value !== selectedTemplate.value) {
       const oldTemplate = templates.value[originalTemplateName.value]
       if (oldTemplate && oldTemplate.packages) {
@@ -494,7 +304,6 @@ async function saveAppConfig() {
       }
     }
 
-    // 添加到新模板
     const template = templates.value[selectedTemplate.value]
     if (template) {
       if (!template.packages) {
@@ -506,7 +315,6 @@ async function saveAppConfig() {
       }
     }
   } else {
-    // 如果取消了模板配置，从所有模板中移除
     const allTemplates = configStore.getTemplates()
     for (const [name, template] of Object.entries(allTemplates)) {
       if (template.packages?.includes(props.app.packageName)) {
@@ -516,28 +324,10 @@ async function saveAppConfig() {
     }
   }
 
-  // 保存自定义配置
   if (hasCustomConfig.value) {
-    const appConfig: AppConfig = {
-      package: props.app.packageName,
-      manufacturer: customFormData.value.manufacturer,
-      brand: customFormData.value.brand,
-      model: customFormData.value.model,
-      device: customFormData.value.device,
-      product: customFormData.value.product,
-      name: customFormData.value.name,
-      marketname: customFormData.value.marketname,
-      fingerprint: customFormData.value.fingerprint,
-      build_id: customFormData.value.build_id,
-      android_version: customFormData.value.android_version,
-      sdk_int: customFormData.value.sdk_int ? Number(customFormData.value.sdk_int) : undefined,
-      characteristics: customFormData.value.characteristics,
-      force_denylist_unmount: customFormData.value.force_denylist_unmount,
-      mode: customFormData.value.mode,
-    }
+    const appConfig = toAppConfig(props.app.packageName)
     configStore.setApp(appConfig)
   } else {
-    // 如果取消了自定义配置，删除它
     configStore.deleteApp(props.app.packageName)
   }
 
