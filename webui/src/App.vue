@@ -74,6 +74,8 @@ import { Home, FileText, Smartphone, Settings } from 'lucide-vue-next'
 import AppsPageSkeleton from './components/apps/AppsPageSkeleton.vue'
 import { useAppsStore } from './stores/apps'
 import { useConfigStore } from './stores/config'
+import { useNavigationStore } from './stores/navigation'
+import type { PageId } from './stores/navigation'
 import { useSettingsStore } from './stores/settings'
 import { applyThemeToDocument } from './utils/theme'
 import { useI18n } from './utils/i18n'
@@ -82,7 +84,6 @@ import StatusPage from './pages/StatusPage.vue'
 type AppsPageComponent = (typeof import('./pages/AppsPage.vue'))['default']
 type TemplatePageComponent = (typeof import('./pages/TemplatePage.vue'))['default']
 type SettingsPageComponent = (typeof import('./pages/SettingsPage.vue'))['default']
-type PageId = 'home' | 'templates' | 'apps' | 'settings'
 type SwipeIntent = 'horizontal' | 'vertical' | null
 type ResizeObserverInstance = InstanceType<typeof window.ResizeObserver>
 const PAGE_ORDER: PageId[] = ['home', 'templates', 'apps', 'settings']
@@ -148,6 +149,7 @@ let appDataWarmupId: number | null = null
 let pageStageResizeObserver: ResizeObserverInstance | null = null
 let mediaQuery: ReturnType<typeof window.matchMedia> | null = null
 let mediaQueryListener: ((event: { matches: boolean }) => void) | null = null
+let popstateHandler: ((event: Event) => void) | null = null
 let overscrollReleaseTimer: number | null = null
 let overscrollScrollElement: HTMLElement | null = null
 let overscrollTouchId: number | null = null
@@ -230,6 +232,7 @@ const SettingsPage = defineAsyncComponent<SettingsPageComponent>({
 const configStore = useConfigStore()
 const appsStore = useAppsStore()
 const settingsStore = useSettingsStore()
+const navigationStore = useNavigationStore()
 const { t } = useI18n()
 
 const versionDisplay = computed(() =>
@@ -330,7 +333,7 @@ function primeNeighborPages(index: number) {
   }
 }
 
-function setActivePage(pageId: PageId) {
+function setActivePage(pageId: PageId, options: { skipHistory?: boolean } = {}) {
   if (activePage.value === pageId) {
     return
   }
@@ -338,6 +341,10 @@ function setActivePage(pageId: PageId) {
   markPageAsRendered(pageId)
   activePage.value = pageId
   primePage(pageId)
+  navigationStore.setCurrentPage(pageId)
+  if (!options.skipHistory) {
+    navigationStore.pushPageToStack(pageId)
+  }
 }
 
 function handlePageChange(pageId: PageId) {
@@ -756,7 +763,43 @@ function scheduleAppDataWarmup() {
   appDataWarmupTimer = window.setTimeout(runWarmup, 1800)
 }
 
+function setupHistory() {
+  // Give the initial entry a state so popstate can read dfPage when swiping back to it
+  navigationStore.replacePageHistory('home')
+
+  popstateHandler = (_event: Event) => {
+    if (navigationStore.shouldIgnorePopstate()) return
+
+    // Sub-page (modal) → close it visually.
+    // The browser's history.back() already brought us to the previous entry,
+    // so we must NOT call popModalHistory() — that would be an extra back step.
+    // wasProgrammaticClose prevents the composable's watch from calling it either.
+    if (navigationStore.hasOpenModals()) {
+      navigationStore.dismissTopModal()
+      return
+    }
+
+    // Top-level page → jump directly to home (skip intermediate top-level pages)
+    if (navigationStore.hasPageHistory()) {
+      navigationStore.jumpToHome()
+      // jumpToHome calls history.go(-n), which fires another popstate.
+      // That popstate restores the home entry's state; handler reads it below.
+      return
+    }
+
+    // At home (no previous page) → read state; null means WebView exits via system back
+    const state = window.history?.state as { dfPage?: PageId; modal?: boolean } | null
+    const targetPage = state?.dfPage
+    if (targetPage && PAGE_ORDER.includes(targetPage)) {
+      setActivePage(targetPage, { skipHistory: true })
+    }
+  }
+
+  window.addEventListener('popstate', popstateHandler)
+}
+
 onMounted(() => {
+  setupHistory()
   scheduleConfigBootstrap()
   schedulePageWarmup()
   scheduleAppDataWarmup()
@@ -780,6 +823,11 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  if (popstateHandler) {
+    window.removeEventListener('popstate', popstateHandler)
+    popstateHandler = null
+  }
+
   resetSwipeTracking(activePointerId.value)
   window.removeEventListener('resize', syncPageStageWidth)
   pageStageResizeObserver?.disconnect()

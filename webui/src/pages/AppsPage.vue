@@ -38,6 +38,7 @@ import AppsPageSkeleton from '../components/apps/AppsPageSkeleton.vue'
 import { useAppsStore } from '../stores/apps'
 import { useConfigStore } from '../stores/config'
 import { useSettingsStore } from '../stores/settings'
+import { useModalHistory } from '../composables/useModalHistory'
 import { useI18n } from '../utils/i18n'
 import { normalizePackageName } from '../utils/package'
 import type { InstalledApp } from '../types'
@@ -56,6 +57,10 @@ const searchQuery = ref('')
 const filterType = ref<FilterType>('all')
 const configDialogVisible = ref(false)
 const currentApp = ref<InstalledApp | null>(null)
+
+useModalHistory(configDialogVisible, () => {
+  configDialogVisible.value = false
+})
 const showSystemApps = computed({
   get: () => settingsStore.showSystemApps,
   set: (value: boolean) => settingsStore.setShowSystemApps(value),

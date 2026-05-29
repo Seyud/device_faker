@@ -39,11 +39,13 @@
 
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onActivated, ref } from 'vue'
+import { storeToRefs } from 'pinia'
 import TemplateHeader from '../components/templates/TemplateHeader.vue'
 import TemplateList from '../components/templates/TemplateList.vue'
 import OnlineTemplateLibraryView from '../components/OnlineTemplateLibraryView.vue'
 import { useConfigStore } from '../stores/config'
 import { useOnlineTemplatesStore } from '../stores/onlineTemplates'
+import { useModalHistory } from '../composables/useModalHistory'
 import { useI18n } from '../utils/i18n'
 import { useLazyMessageBox } from '../utils/elementPlus'
 import { copyTextToClipboard, stringifyTemplatesToToml } from '../utils/templateTransfer'
@@ -59,6 +61,7 @@ const TemplateTransferDialog = defineAsyncComponent(
 
 const configStore = useConfigStore()
 const onlineTemplatesStore = useOnlineTemplatesStore()
+const { libraryOpen } = storeToRefs(onlineTemplatesStore)
 const { t, locale } = useI18n()
 const getMessageBox = useLazyMessageBox()
 
@@ -107,6 +110,14 @@ function showOnlineLibrary() {
 function closeOnlineLibrary() {
   onlineTemplatesStore.closeLibrary()
 }
+
+useModalHistory(libraryOpen, () => onlineTemplatesStore.closeLibrary())
+useModalHistory(dialogVisible, () => {
+  dialogVisible.value = false
+})
+useModalHistory(transferDialogVisible, () => {
+  transferDialogVisible.value = false
+})
 
 function showCreateDialog() {
   isEditing.value = false
