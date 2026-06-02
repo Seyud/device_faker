@@ -1,4 +1,4 @@
-**简体中文** | [English](https://github.com/Seyud/device_faker/blob/main/docs/en/README.md)
+**简体中文** | [English](https://github.com/Seyud/device_faker/blob/main/docs/en/README.md) | [Türkçe](https://github.com/Seyud/device_faker/blob/main/docs/tr/README.md)
 
 # Device Faker 📱
 

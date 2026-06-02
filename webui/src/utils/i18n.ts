@@ -336,6 +336,7 @@ export const messages = {
           system: '跟随系统',
           zh: '简体中文',
           en: 'English',
+          tr: 'Türkçe',
         },
       },
       module: {
@@ -721,6 +722,7 @@ export const messages = {
           system: 'Follow System',
           zh: 'Simplified Chinese',
           en: 'English',
+          tr: 'Türkçe',
         },
       },
       module: {
@@ -770,9 +772,402 @@ export const messages = {
       },
     },
   },
+  tr: {
+    common: {
+      cancel: 'İptal',
+      confirm: 'Onayla',
+      save: 'Kaydet',
+      delete: 'Sil',
+      edit: 'Düzenle',
+      add: 'Ekle',
+      loading: 'Yükleniyor...',
+      success: 'Başarılı',
+      failed: 'Başarısız',
+      default: 'Varsayılan',
+      enabled: 'Etkin',
+      disabled: 'Etkin Değil',
+      saved: 'Kaydedildi',
+    },
+    config: {
+      load_failed: 'Konfigürasyon yüklenirken bir hata oluştu.',
+      empty_content: 'Konfigürasyon boş, hiçbir şey yazılmadı.',
+      save_verify_failed: 'Kaydetme doğrulaması başarısız oldu.',
+      backup_used: 'Konfigürasyon yerel yedekten kurtarıldı.',
+      backup_failed: 'Yerel yedek mevcut değil, konfigürasyon yüklemesi başarısız oldu.',
+    },
+    nav: {
+      home: 'Ev',
+      templates: 'Şablonlar',
+      apps: 'Uygulamalar',
+      settings: 'Ayarlar',
+    },
+    status: {
+      title: 'Ev',
+      items: {
+        module_status: 'Modül Bilgisi',
+        module_version: 'Modül Sürümü',
+        impersonated_apps_count: 'Taklit Edilen Uygulamalar',
+        templates_count: 'Şablon Sayısı',
+        work_mode: 'Çalışma Modu',
+      },
+      follow: {
+        title: 'Modülü Takip Et',
+        action: 'Proje Güncellemelerini Takip Et',
+        channels: 'Topluluklara katıl, geliştirici ile iletişime geç ve depoyu yıldızla.',
+        dialog_title: 'Modülü Takip Et',
+        module_name: 'Modül İsmi',
+        author: 'Projenin Sahibi',
+        communities: 'Topluluklar',
+        repository: 'GitHub Deposu',
+        telegram: 'Telegram Grubu',
+        qq_group: 'QQ Grubu',
+        open_link: 'Bağlantıyı Aç',
+        repository_action_primary: "GitHub'u Aç",
+        repository_action_secondary: 'Projeye Yıldız Ver',
+      },
+      mode: {
+        lite: 'Basit Mod',
+        full: 'Tam Mod',
+      },
+    },
+    templates: {
+      title: 'Cihaz Şablonları',
+      actions: {
+        online: 'Çevrimiçi Şablonlar',
+        new: 'Yeni Şablon',
+        transfer: 'İçe/Dışa Aktar',
+        export: 'Dışa Aktar',
+        add: 'Ekle',
+      },
+      fields: {
+        name: 'Şablon İsmi',
+        manufacturer: 'Üretici (Manufacturer)',
+        brand: 'Marka (Brand)',
+        model: 'Model',
+        device: 'Cihaz (Device)',
+        product: 'Ürün (Product)',
+        name_field: 'İsim (Opsiyonel, sadece tam mod)',
+        market_name: 'Market İsmi (Opsiyonel, sadece tam mod)',
+        fingerprint: 'Parmak İzi (Fingerprint)',
+        build_id: 'Yapı Kimiliği (Build ID)',
+        android_version: 'Android Sürümü',
+        sdk_int: 'SDK Sürümü',
+        characteristics: 'Özellikler (Opsiyonel, sadece tam mod)',
+        force_denylist_unmount: 'Denylist Bağlantısını Kaldırmaya Zorla',
+        mode: 'Çalışma Modu (Opsiyonel)',
+        packages: 'Paketler (Opsiyonel)',
+        system: 'Sistem',
+      },
+      placeholders: {
+        name: 'redmagic_9_pro vs.',
+        manufacturer: 'ZTE vs.',
+        brand: 'nubia vs.',
+        model: '25010PN30C, NX769J vs.',
+        device: 'xuanyuan, NX769J vs.',
+        product: 'xuanyuan, NX769J vs.',
+        name_field: 'xuanyuan vs.',
+        market_name: 'REDMAGIC 9 Pro vs.',
+        fingerprint: 'nubia/NX769J/NX769J:14/UKQ1.230917.001/20240813.173312:user/release-keys vs.',
+        build_id: 'UKQ1.230917.001 vs.',
+        android_version: '16, 15, 14 vs.',
+        sdk_int: '36, 35, 34 vs.',
+        characteristics: 'tablet vs. (sadece tam mod)',
+        mode: 'Küresel varsayılanı kullanmak için boş bırakın',
+        packages: 'Paket adını girin veya arayın',
+      },
+      options: {
+        mode_lite: 'lite - Basit Mod\n(Önerilen, Sağlıklı)',
+        mode_full: 'full - Tam Mod\n(Tam Kimlik Sahtekarlığı, Tespit Edilemez)',
+        mode_resetprop: 'resetprop - Resetprop Modu (Salt okunur donanımları destekler)',
+      },
+      empty: {
+        title: 'Hiç Şablon Bulunamadı',
+        hint: 'Yeni bir şablon oluşturmak için yukarıdaki düğmeye tıklayın',
+        packages:
+          'Hiçbir paket eklenmedi. Manuel olarak girin veya yüklü uygulamalar arasından seçim yapın',
+      },
+      dialog: {
+        edit_title: 'Şablonu Düzenle',
+        new_title: 'Yeni Şablon',
+        delete_title: 'Silmeyi Onayla',
+        delete_confirm: 'Bu "{name}" şablonu silmek istediğinize emin misiniz?',
+        rename_overwrite_title: 'Mevcut Şablonun Üstüne Yazılıyor',
+        rename_overwrite_confirm:
+          'Şu an "{oldName}" adlı şablonu "{newName}" olarak yeniden adlandırıp mevcut hedefin üzerine yazmak istiyor musunuz?',
+      },
+      messages: {
+        name_required: 'Lütfen şablon adını giriniz.',
+        saved: 'Şablon başarıyla kaydedildi.',
+        deleted: 'Şablon başarıyla silindi.',
+        export_copy_success: 'Şablon dışa aktarımı kopyalandı',
+        export_copy_failed: 'Kopyalama başarısız oldu, lütfen manuel olarak kopyalayın',
+        pkg_exists: 'Paket zaten eklendi',
+      },
+      labels: {
+        mode: 'Mod',
+        packages: 'Paketler',
+        count_suffix: 'Öğeler',
+        version: 'Sürüm',
+        version_code: 'Sürüm Kodu',
+        author: 'Sahip',
+        description: 'Açıklama',
+      },
+      values: {
+        lite: 'lite (Sade)',
+        full: 'full (Tam)',
+        resetprop: 'resetprop (Resetprop)',
+      },
+      search: {
+        placeholder: 'İsme, markaya veya modele göre arayın',
+        no_results: 'Eşleşen şablon bulunamadı.',
+      },
+      categories: {
+        all: 'Hepsi',
+        common: 'Yaygın',
+        gaming: 'Oyuncu',
+        transcend: 'Transcend',
+      },
+      online: {
+        title: 'Çevrimiçi Şablon Kütüphanesi',
+        subtitle:
+          'Önce kataloğu yükleyin, ardından önbellek yeniden kullanımı ve yeniden deneme desteğiyle tüm şablon ayrıntılarını arka planda yayınlayın.',
+        loading: 'Çevrimiçi şablonlar yükleniyor...',
+        retry: 'Tekrar Dene',
+        retry_failed: 'Tekrar Deneme Başarısız Oldu',
+        retry_detail: 'Tekrar Deneme Detayları',
+        brand: 'Marka',
+        model: 'Model',
+        market_name: 'Market İsmi',
+        importing: 'İçe aktarılıyor...',
+        import: 'İçe Aktar',
+        back: 'Şablonlara Geri Dön',
+        empty_category: 'Bu kategoride hiçbir şablon bulunamadı',
+        empty_filtered: 'Mevcut filtrelerle eşleşen şablon yok',
+        empty_library: 'Kütüphane boş. Yenileyin ve tekrar deneyin.',
+        close: 'Kapat',
+        source_button: 'Kaynak: {source}',
+        refresh: 'Listeyi Yenile',
+        search_placeholder: 'Şablon adına, markaya veya kategoriye göre arama yapın',
+        clear_filters: 'Filtreleri Temizle',
+        progress_label: 'İlerleme Detayı',
+        progress_pending: 'Başlamayı bekliyorum',
+        progress_partial: '{resolved}/{total} çözüldü, {pending} kaldı.',
+        progress_complete: '{count}/{total} yüklendi, {failed} başarısız oldu.',
+        sources: {
+          gitee: 'Gitee',
+          github: 'GitHub',
+        },
+        status: {
+          source: 'Kaynak: {source}',
+          fallback: 'Yedek kaynak kullanılıyor',
+          cached: 'Önbelleğe Alınmış Veri Kullanılıyor',
+          pending: 'Bekleniyor',
+          loading: 'Yükleniyor',
+          ready: 'Hazır',
+          failed: 'Başarısız Oldu',
+        },
+        toasts: {
+          start_loading: 'Çevrimiçi şablonlar yüklenmeye başlanıyor...',
+          fetching_list: 'Şablon listesi getiriliyor...',
+          got_templates: '{count} şablon alındı',
+          no_templates_toast:
+            'Şablon bulunamadı, muhtemelen ağ sorunu veya API kullanım sınırlaması söz konusu.',
+          list_loaded: 'Şablon listesi yüklendi, arka planda detaylar indiriliyor...',
+          content_loaded: '{count} şablon içeriği başarıyla yüklendi.',
+          content_failed: '{count} şablon içeriği yüklenemedi.',
+          load_failed: 'Yükleme başarısız oldu, hata: {error}',
+        },
+        errors: {
+          no_templates:
+            'Şablon bulunamadı, lütfen ağ bağlantınızı kontrol edin veya daha sonra tekrar deneyin.',
+          load_failed: 'Yükleme başarısız oldu',
+          detail_failed: 'Şablon detayını yükleme başarısız oldu.',
+          empty_content: 'Şablon içeriği boş.',
+          import_failed: 'İçe aktarma başarısız oldu.',
+        },
+        messages: {
+          import_success: '"{name}" şablonu başarıyla içe aktarıldı.',
+          exists_confirm: '"{name}" şablonu zaten mevcut, üzerine yazılsın mı?',
+          exists_title: 'İçe Aktarma Onayı',
+          overwrite: 'Üzerine Yaz',
+        },
+      },
+      transfer: {
+        title: 'Şablonları İçe/Dışa Aktar',
+        tabs: {
+          import: 'İçe Aktar',
+          export: 'Dışa Aktar',
+          device: 'Cihazı Dışa Aktar',
+        },
+        import: {
+          input_label: 'TOML içe aktar',
+          input_hint:
+            'Tam bir config.toml dosyasını veya tek bir [templates.xxx] bölümünü destekler',
+          input_placeholder: 'TOML şablonunu buraya yapıştırın',
+          preview_label: 'İçe Aktarmayı Önizle',
+          detected: '{count} şablon algılandı',
+          empty:
+            'TOML dosyasını yapıştırdıktan sonra, içe aktarılabilecek şablon adları burada görünecektir.',
+          invalid_toml: 'Geçersiz TOML formatı',
+          no_valid_templates: 'Geçerli şablon bulunamadı',
+          overwrite_title: 'Mevcut Şablonların Üzerine Yaz',
+          overwrite_confirm:
+            '{count} adet şablon zaten mevcut ve bunların yerine yenileri yapılacak: {names}',
+          submit: 'Şablonları İçe Aktar',
+          success: '{count} tane şablon içe aktarıldı',
+        },
+        export: {
+          selection_label: 'Dışa aktarmak için şablonları seçin',
+          selection_hint: 'Bir veya daha fazla şablon seçerek TOML çıktısı oluşturun',
+          select_all: 'Hepsini Seç',
+          clear_all: 'Temizle',
+          empty: 'Dışa aktarılabilecek şablon yok.',
+          preview_label: 'Dışa Aktarma Önizlemesi',
+          selected: '{count} tane şablon seçildi',
+          empty_preview: 'Şablonları seçtikten sonra oluşturulan TOML dosyası burada görünecektir.',
+          copy: 'Dışa Aktarma Metnini Kopyala',
+          copy_success: 'Kopyalanan metni dışa aktar',
+          copy_failed: 'Kopyalama başarısız oldu, lütfen manuel kopyalayın.',
+          none_selected: 'Dışa aktarmak için en az bir şablon seçin.',
+        },
+        device: {
+          read_label: 'Mevcut cihaz özelliklerini okuyun',
+          read_hint:
+            "getprop'tan bir şablon oluşturun, ardından bunu config'e kaydedin veya TOML çıktısını kopyalayın.",
+          read: 'Cihazı Oku',
+          reading: 'Okunuyor...',
+          read_success: 'Mevcut cihaz şablonu oluşturuldu.',
+          read_failed: 'Mevcut cihaz şablınu okunamadı.',
+          template_name_label: 'Şablon İsmi',
+          template_name_placeholder: 'Şablon ismini gir',
+          template_name_required: 'Lütfen şablon adını girin',
+          preview_label: 'Dışa Aktarmayı Önizle',
+          empty_preview:
+            'Mevcut cihaz özelliklerini okuduktan sonra oluşturulan TOML burada görünecektir.',
+          copy: 'Dışa Aktarma Metnini Kopyala',
+          copy_success: 'Dışa Aktarma Metni Kopyalandı',
+          copy_failed: 'Kopyalama başarısız oldu, lütfen manuel kopyalayın.',
+          save: 'Şablon Olarak Kaydet',
+          save_success: 'Şablon Kaydedildi',
+          overwrite_title: 'Mevcut Şablonun Üzerine Yaz',
+          overwrite_confirm: '"{name}" şablonu zaten mevcut. Üzerine yazılsın mı?',
+          empty: 'Öncelikle mevcut cihaz özelliklerini okuyun.',
+        },
+      },
+    },
+    apps: {
+      title: 'Uygulama Yönetimi',
+      search_placeholder: 'Uygulama veya paket arayın',
+      actions: {
+        show_system: 'Sistem Uygulamalarını Göster',
+        hide_system: 'Sistem Uygulamalarını Gizle',
+      },
+      tabs: {
+        all: 'Hepsi',
+        configured: 'Yapılandırıldı',
+        unconfigured: 'Yapılandırılmadı',
+      },
+      status: {
+        configured: 'Yapılandırıldı',
+        unconfigured: 'Yapılandırılmadı',
+        not_installed: 'Kurulu Değil',
+      },
+      empty: {
+        search: 'Eşleşen hiçbir uygulama bulunamadı',
+        configured: 'Hiçbir uygulama yapılandırılmadı',
+        unconfigured: 'Tüm uygulamalar yapılandırıldı',
+        all: 'Hiçbir uygulama bulunamadı.',
+      },
+      dialog: {
+        config_title: "{name}'ı yapılandır",
+        mode_template: 'Şablon Yapılandırması',
+        mode_custom: 'Özel Yapılandırma',
+        mode_remove: 'Yapılandırmayı Kaldır',
+        select_template_placeholder: 'Cihaz Şablonunu Seçin',
+        search_template_placeholder: 'İsme, markaya veya modele göre arayın.',
+        search_no_result: 'Eşleşen şablon bulunamadı, başka bir anahtar kelime deneyin.',
+        no_templates: 'Henüz şablon yok, oluşturun veya içe aktarın.',
+        remove_hint:
+          'Bu uygulama için sahtekarlık yapılandırmasını kaldırmak istediğinizden emin misiniz?',
+        remove_custom_config: 'Özel Yapılandırmayı Kaldır',
+        remove_template_config: 'Şablon Yapılandırmasını Kaldır',
+      },
+      messages: {
+        select_template: 'Lütfen bir şablon seçin',
+        saved: 'Yapılandırma kaydedildi',
+        custom_config_removed: 'Özel yapılandırma kaldırıldı',
+        template_config_removed: 'Şablon yapılandırması kaldırıldı',
+      },
+    },
+    settings: {
+      display: {
+        title: 'Görüntüleme Ayarları',
+        theme: {
+          label: 'Tema',
+          desc: 'Arayüz temasını seç',
+          system: 'Sistemi Takip Et',
+          light: 'Aydınlık Tema',
+          dark: 'Karanlık Tema',
+        },
+        language: {
+          label: 'Dil',
+          desc: 'Arayüz Dilin Seç',
+          system: 'Sistemi Takip Et',
+          zh: 'Basitleştirilmiş Çince',
+          en: 'İngilizce',
+          tr: 'Türkçe',
+        },
+      },
+      module: {
+        title: 'Modül Ayarları',
+        default_mode: {
+          label: 'Varsayılan Çalışma Modu',
+          desc: 'Modül için varsayılan çalışma modunu seçin.',
+          lite: 'Basit Mod (Önerilir)',
+          full: 'Tam Mod',
+          resetprop: 'Resetprop Mod',
+        },
+        force_denylist_unmount: {
+          label: 'Varsayılan Denylist Listesinden Çıkarma',
+          desc: 'Hedef uygulamalar için Zygisk FORCE_DENYLIST_UNMOUNT özelliğini etkinleştirin.',
+        },
+        debug: {
+          label: 'Hata Ayıklama Modu',
+          desc: "Logcat'de detaylı günlükleri aktifleştirir.",
+        },
+      },
+      tools: {
+        title: 'Araçlar',
+        convert: {
+          label: 'Yapılandırma Dönüştürme',
+          desc: 'system.prop tabanlı spoof modülünü cihaz şablonuna dönüştürün',
+          btn: 'Dönüşümü Başlat',
+        },
+      },
+      dialog: {
+        result: {
+          title: 'Dönüşüm Sonucu',
+          template_name_label: 'Şablon Adı',
+          template_name_placeholder: 'Lütfen şablon adı giriniz',
+          preview_label: 'İçeriği Önizle',
+          btn_save: 'Şablon Olarak Kaydet',
+        },
+      },
+      messages: {
+        default_mode_updated: 'Varsayılan mod güncellendi',
+        debug_enabled: 'Hata ayıklama modu etkinleştirildi',
+        debug_disabled: 'Hata ayıklama modu kapatıldı',
+        read_failed: 'Dosya okunamadı veya dosya boş',
+        convert_failed: 'Dönüştürme başarısız oldu',
+        save_failed: 'Kaydetme başarısız oldu',
+        save_success: 'Başarıyla kaydedildi',
+        template_saved: 'Şablon kaydedildi',
+      },
+    },
+  },
 }
 
-export type Locale = 'zh' | 'en'
+export type Locale = 'zh' | 'en' | 'tr'
 
 // Simple object path access
 function getNestedValue(obj: unknown, path: string): string {
@@ -790,7 +1185,11 @@ export function useI18n() {
   const locale = computed(() => {
     if (settingsStore.language === 'system') {
       const sysLang = navigator.language
-      return sysLang.startsWith('zh') ? 'zh' : 'en'
+
+      if (sysLang.startsWith('zh')) return 'zh'
+      if (sysLang.startsWith('tr')) return 'tr'
+
+      return 'en'
     }
     return settingsStore.language as Locale
   })

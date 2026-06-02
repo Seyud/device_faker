@@ -34,6 +34,7 @@
           <el-option :label="t('settings.display.language.system')" value="system" />
           <el-option :label="t('settings.display.language.zh')" value="zh" />
           <el-option :label="t('settings.display.language.en')" value="en" />
+          <el-option :label="t('settings.display.language.tr')" value="tr" />
         </el-select>
       </div>
     </div>
@@ -194,7 +195,7 @@ function onThemeChange(value: string) {
 }
 
 function onLanguageChange(value: string) {
-  settingsStore.setLanguage(value as 'system' | 'zh' | 'en')
+  settingsStore.setLanguage(value as 'system' | 'zh' | 'en' | 'tr')
 }
 
 async function onModeChange(value: string) {
