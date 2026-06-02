@@ -40,6 +40,12 @@ export const messages = {
         templates_count: '机型模板数量',
         work_mode: '工作模式',
       },
+      // i generated these fields with AI, if it's not right please update :)
+      translators: {
+        title: '译者',
+        action: '项目翻译人员',
+        dialog_title: '关于译者',
+      },
       follow: {
         title: '关注模块',
         action: '获取项目动态',
@@ -423,6 +429,11 @@ export const messages = {
         impersonated_apps_count: 'Impersonated Apps',
         templates_count: 'Templates Count',
         work_mode: 'Work Mode',
+      },
+      translators: {
+        title: 'Translators',
+        action: 'Project Translators',
+        dialog_title: 'About Translators',
       },
       follow: {
         title: 'Follow Module',
@@ -810,6 +821,11 @@ export const messages = {
         templates_count: 'Şablon Sayısı',
         work_mode: 'Çalışma Modu',
       },
+      translators: {
+        title: 'Çevirmenler',
+        action: 'Proje Çevirmenleri',
+        dialog_title: 'Çevirmenler Hakkında',
+      },
       follow: {
         title: 'Modülü Takip Et',
         action: 'Proje Güncellemelerini Takip Et',
@@ -1163,6 +1179,19 @@ export const messages = {
         save_success: 'Başarıyla kaydedildi',
         template_saved: 'Şablon kaydedildi',
       },
+    },
+  },
+}
+
+export const projectTranslators = {
+  turkish: {
+    locale_name: '🇹🇷 Türkçe',
+    full_name: 'mamii.',
+    user_name: 'mamiiblt',
+    pp_url: 'https://mamii.dev/mamiiblt.png',
+    socials: {
+      github: 'mamiiblt',
+      website: 'https://mamii.dev/about',
     },
   },
 }
