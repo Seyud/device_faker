@@ -154,7 +154,7 @@ impl MyModule {
 
         hook_build_fields(env, &merged)?;
         if config.debug {
-            info!("Build fields hooked successfully");
+            info!("Build fields faked successfully");
         }
 
         match SpoofMode::from_mode_str(&merged.mode) {
@@ -211,7 +211,7 @@ impl MyModule {
         FAKE_PROPS.lock().unwrap().clear();
         IS_FULL_MODE.store(false, std::sync::atomic::Ordering::Relaxed);
         if debug {
-            info!("Lite mode: only Build fields hooked, unloading module");
+            info!("Lite mode: only Build fields faked, unloading module");
         }
         api.set_option(ZygiskOption::DlCloseModuleLibrary);
         Ok(())
@@ -219,7 +219,7 @@ impl MyModule {
 
     fn apply_cpu_mode(
         api: &mut ZygiskApi<V4>,
-        env: &mut EnvUnowned,
+        _env: &mut EnvUnowned,
         merged: &MergedAppConfig,
         package_with_user: &str,
         debug: bool,
@@ -227,10 +227,7 @@ impl MyModule {
         FAKE_PROPS.lock().unwrap().clear();
         IS_FULL_MODE.store(false, std::sync::atomic::Ordering::Relaxed);
 
-        hook_build_fields(env, merged)?;
-        if debug {
-            info!("CPU mode: Build fields hooked");
-        }
+        // Build 字段伪装已在 do_handle_app_specialize 的模式分发前完成，无需重复调用
 
         if let Err(err) = apply_cpu_spoof(api, merged, package_with_user, debug) {
             error!("Failed to apply CPU spoof: {err:?}");
@@ -249,7 +246,7 @@ impl MyModule {
         debug: bool,
     ) -> anyhow::Result<()> {
         if debug {
-            info!("Full mode: hooking SystemProperties");
+            info!("Full mode: faking SystemProperties");
         }
 
         let prop_map = Config::build_merged_property_map(merged);
@@ -263,7 +260,7 @@ impl MyModule {
         hook_native_property_get(api)?;
 
         if debug {
-            info!("SystemProperties hooked successfully, module will stay loaded");
+            info!("SystemProperties faked successfully, module will stay loaded");
         }
 
         Ok(())

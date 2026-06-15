@@ -818,16 +818,25 @@ onActivated(() => {
 }
 
 .author-icon-wrapper {
-  padding: 0;
+  padding: 2px;
   overflow: hidden;
-  background: transparent;
-  box-shadow: none;
+  background: linear-gradient(135deg, rgba(148, 163, 184, 0.18), rgba(148, 163, 184, 0.06));
+  box-shadow:
+    0 0 0 1px rgba(148, 163, 184, 0.22),
+    0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.dark .author-icon-wrapper {
+  background: linear-gradient(135deg, rgba(148, 163, 184, 0.14), rgba(148, 163, 184, 0.04));
+  box-shadow:
+    0 0 0 1px rgba(148, 163, 184, 0.16),
+    0 2px 8px rgba(0, 0, 0, 0.24);
 }
 
 .author-avatar-icon {
   width: 100%;
   height: 100%;
-  border-radius: 12px;
+  border-radius: 10px;
   object-fit: cover;
   display: block;
 }
