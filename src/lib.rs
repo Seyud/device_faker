@@ -37,7 +37,7 @@ impl ZygiskModule for MyModule {
 
     fn on_load(&self, _api: ZygiskApi<V4>, _env: EnvUnowned) {
         #[cfg(target_os = "android")]
-        file_logger::init();
+        file_logger::init_buffer_only();
     }
 
     fn pre_app_specialize(

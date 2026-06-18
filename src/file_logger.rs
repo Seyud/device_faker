@@ -53,9 +53,8 @@ impl Log for AdaptiveLogger {
 static ADAPTIVE_LOGGER: AdaptiveLogger = AdaptiveLogger;
 static INIT_ONCE: Once = Once::new();
 
-/// 初始化日志。
-/// - companion 进程有 root 权限，能直接写 /data/adb/device_faker/logs/，直接落盘。
-/// - Zygisk 进程没有 root 权限，先缓冲到内存，在 pre_app_specialize 时通过 companion 批量写入。
+/// 初始化日志，尝试直接落盘。
+/// 仅 companion 进程（有 root 权限）使用。
 pub fn init() {
     INIT_ONCE.call_once(|| {
         let file = open_log_file();
@@ -65,6 +64,15 @@ pub fn init() {
             *inner = LoggerInner::File(file);
         }
 
+        let _ = log::set_logger(&ADAPTIVE_LOGGER);
+        log::set_max_level(LevelFilter::Debug);
+    });
+}
+
+/// 仅初始化内存缓冲模式，不打开文件。
+/// 用于 `on_load`，避免在 webview_zygote 等受限制进程中触发文件访问导致进程崩溃。
+pub fn init_buffer_only() {
+    INIT_ONCE.call_once(|| {
         let _ = log::set_logger(&ADAPTIVE_LOGGER);
         log::set_max_level(LevelFilter::Debug);
     });
