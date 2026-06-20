@@ -1,5 +1,5 @@
 import { inject, provide, ref, type InjectionKey, type Ref } from 'vue'
-import type { Template, AppConfig } from '../types'
+import type { Template, AppConfig, SpoofMode } from '../types'
 
 export const DEVICE_FAKER_FORM_KEY: InjectionKey<Ref<DeviceFakerFormData>> =
   Symbol('deviceFakerForm')
@@ -18,7 +18,7 @@ export interface DeviceFakerFormData {
   sdk_int: string
   characteristics: string
   force_denylist_unmount: boolean | undefined
-  mode: 'lite' | 'cpu' | 'full' | 'resetprop' | ''
+  mode: SpoofMode | ''
   packages: string[]
   cpu_spoof: string
   cpu_spoof_custom: string

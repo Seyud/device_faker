@@ -55,11 +55,9 @@
           {{
             template.mode === 'lite'
               ? t('templates.values.lite')
-              : template.mode === 'cpu'
-                ? t('templates.values.cpu')
-                : template.mode === 'full'
-                  ? t('templates.values.full')
-                  : t('templates.values.resetprop')
+              : template.mode === 'full'
+                ? t('templates.values.full')
+                : t('templates.values.companion')
           }}
         </span>
       </div>

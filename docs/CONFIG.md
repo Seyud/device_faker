@@ -26,11 +26,12 @@ default_mode = "lite"  # 推荐：轻量模式（隐藏性更好）
   - 可能被检测
   - 仅在 lite 不够用时使用
 
-- `"resetprop"` - Resetprop 模式
-  - 使用 resetprop 工具修改属性
+- `"companion"` - Companion 模式
+  - 使用 companion 进程通过 resetprop 修改属性
   - 支持修改只读属性
   - 支持自定义属性和属性置空/删除
-  - 在应用进入 resetprop 模式前会用 `getprop` 备份原始值，退出或切换到其它应用后由守护进程用 resetprop 自动还原
+  - 配置 CPU 预设或自定义 CPU 信息时，会伪装 `/proc/cpuinfo`
+  - 在应用进入 companion 模式前会用 `getprop` 备份原始值，退出或切换到其它应用后由 companion 自动还原
 
 ### default_force_denylist_unmount（全局默认卸载挂载点）
 
@@ -159,7 +160,7 @@ model = "SM-S9280"
 ### 应用配置字段说明
 
 **字段与系统属性映射关系**:
-| 字段 | lite 模式 | full 模式 (SystemProperties) | 说明 |
+| 字段 | lite 模式 | full/companion 模式 (SystemProperties) | 说明 |
 |------|----------|------------------------------|------|
 | `manufacturer` | `Build.MANUFACTURER` | + `ro.product.manufacturer` | 厂商 (如: Xiaomi, Samsung) |
 | `brand` | `Build.BRAND` | + `ro.product.brand` | 品牌 (如: Redmi, nubia) |
@@ -170,7 +171,7 @@ model = "SM-S9280"
 | `build_id` | `Build.ID` | + `ro.build.id` 等 | Build ID (如: UKQ1.230917.001) |
 | `name` | ❌ | `ro.product.name` + `ro.product.device` | 代号 (如: xuanyuan) |
 | `marketname` | ❌ | `ro.product.marketname` | 型号 (如: REDMI K90 Pro Max) |
-| `characteristics` | ❌ | `ro.build.characteristics` | 特性 (如: tablet) - 仅 full 模式生效 |
+| `characteristics` | ❌ | `ro.build.characteristics` | 特性 (如: tablet) |
 | `android_version` | `Build.VERSION.RELEASE` | + `ro.build.version.release` 等 | Android 版本号 (如: 15, 14) |
 | `sdk_int` | `Build.VERSION.SDK_INT` | + `ro.build.version.sdk` 等 | SDK 版本号 (如: 35, 34) |
 | `custom_props` | ❌ | ✅ | 自定义属性映射表 |
@@ -185,7 +186,7 @@ model = "SM-S9280"
 **自定义属性字段**:
 | 字段 | 说明 |
 |------|------|
-| `custom_props` | 自定义属性映射表，仅 full/resetprop 模式支持 |
+| `custom_props` | 自定义属性映射表，仅 full/companion 模式支持 |
 
 **配置元数据字段**（仅用于显示，不影响伪装效果）:
 | 字段 | 说明 |
@@ -204,9 +205,9 @@ model = "SM-S9280"
 - 除了 `package` 外,所有字段都是可选的
 - 使用模板的 `packages` 时,无需写 [[apps]](自动应用)
 - [[apps]] 中的字段会覆盖模板的配置
-- `name` 和 `marketname` 仅在 **full 模式**下有效(影响 SystemProperties)
-- `name` 字段在 full 模式下会同时伪装 `ro.product.name` 和 `ro.product.device`
-- `characteristics` 字段仅在 **full 模式**下生效
+- `name` 和 `marketname` 仅在 **full/companion 模式**下有效(影响 SystemProperties)
+- `name` 字段在 full/companion 模式下会同时伪装 `ro.product.name` 和 `ro.product.device`
+- `characteristics` 字段仅在 **full/companion 模式**下生效
 - **lite 模式**下,只有 `manufacturer`、`brand`、`model`、`device`、`product`、`fingerprint`、`build_id`、`android_version`、`sdk_int` 生效
 
 ## Build ID 伪装
@@ -217,7 +218,7 @@ model = "SM-S9280"
 |------|-----------|----------|
 | lite | `ID` | ❌ |
 | full | `ID` | `ro.build.id`, `ro.system.build.id`, `ro.vendor.build.id`, `ro.product.build.id` |
-| resetprop | `ID` | `ro.build.id`, `ro.system.build.id`, `ro.vendor.build.id`, `ro.product.build.id` |
+| companion | `ID` | `ro.build.id`, `ro.system.build.id`, `ro.vendor.build.id`, `ro.product.build.id` |
 
 ## Android 版本伪装
 
@@ -245,9 +246,9 @@ sdk_int = 33
 |------|-------------------|----------|
 | lite | `RELEASE`, `SDK_INT` | ❌ |
 | full | `RELEASE`, `SDK_INT` | `ro.build.version.release`, `ro.build.version.sdk` 等 |
-| resetprop | `RELEASE`, `SDK_INT` | `ro.build.version.release`, `ro.build.version.sdk` 等 |
+| companion | `RELEASE`, `SDK_INT` | `ro.build.version.release`, `ro.build.version.sdk` 等 |
 
-**完整的系统属性列表**（full/resetprop 模式）：
+**完整的系统属性列表**（full/companion 模式）：
 - `ro.build.version.release`
 - `ro.system.build.version.release`
 - `ro.vendor.build.version.release`
@@ -259,12 +260,12 @@ sdk_int = 33
 
 ## 自定义属性
 
-**full/resetprop 模式** 都支持自定义属性，可以设置任意系统属性：
+**full/companion 模式** 都支持自定义属性，可以设置任意系统属性：
 
 ```toml
 [[apps]]
 package = "com.custom.app"
-mode = "resetprop"
+mode = "companion"
 manufacturer = "Custom"
 
 # 自定义属性
@@ -289,7 +290,7 @@ manufacturer = "Custom"
 ```toml
 [[apps]]
 package = "com.example.app"
-mode = "resetprop"
+mode = "companion"
 manufacturer = "Google"
 brand = "__EMPTY__"           # 将 brand 设置为空字符串
 model = "__DELETE__"          # 删除 model 属性
@@ -303,20 +304,21 @@ model = "__DELETE__"          # 删除 model 属性
 
 ## 模式对比
 
-| 特性 | lite 模式 ⭐ | full 模式 | resetprop 模式 |
+| 特性 | lite 模式 ⭐ | full 模式 | companion 模式 |
 |------|-------------|-----------|----------------|
 | Build 类伪装 | ✅ | ✅ | ✅ |
 | SystemProperties 伪装 | ❌ | ✅ | ✅ |
-| characteristics 伪装 | ❌ | ✅ | ❌ |
+| characteristics 伪装 | ❌ | ✅ | ✅ |
 | 只读属性修改 | ❌ | ❌ | ✅ |
 | 自定义属性 | ❌ | ✅ | ✅ |
 | 属性置空/删除 | ❌ | ✅ | ✅ |
 | Android 版本伪装 | ✅ | ✅ | ✅ |
 | SDK 版本伪装 | ✅ | ✅ | ✅ |
-| 模块可卸载 | ✅ | ❌ | ❌ |
-| 隐蔽性 | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ |
+| CPU 信息伪装 | ❌ | ❌ | ✅ |
+| 模块可卸载 | ✅ | ❌ | ✅ |
+| 隐蔽性 | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ |
 | 被检测风险 | 极低 | 较低 | 较低 |
-| 推荐度 | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ |
+| 推荐度 | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ |
 
 ## 如何选择模式？
 
@@ -333,7 +335,8 @@ model = "__DELETE__"          # 删除 model 属性
 - 需要伪装 characteristics（如 QQ 平板模式）
 - 需要自定义属性
 
-**使用 resetprop 模式**：
+**使用 companion 模式**：
 - 需要修改只读属性
 - 需要删除或置空某些属性
 - 需要完整的自定义属性支持
+- 需要伪装 `/proc/cpuinfo`

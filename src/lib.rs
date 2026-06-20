@@ -159,12 +159,9 @@ impl MyModule {
 
         match SpoofMode::from_mode_str(&merged.mode) {
             SpoofMode::Lite => Self::apply_lite_mode(api, config.debug),
-            SpoofMode::Cpu => {
-                Self::apply_cpu_mode(api, env, &merged, &package_with_user, config.debug)
-            }
             SpoofMode::Full => Self::apply_full_mode(api, env, &merged, config.debug),
-            SpoofMode::Resetprop => {
-                Self::apply_resetprop_mode(api, &package_with_user, &merged, config.debug)
+            SpoofMode::Companion => {
+                Self::apply_companion_mode(api, &package_with_user, &merged, config.debug)
             }
         }
     }
@@ -217,28 +214,6 @@ impl MyModule {
         Ok(())
     }
 
-    fn apply_cpu_mode(
-        api: &mut ZygiskApi<V4>,
-        _env: &mut EnvUnowned,
-        merged: &MergedAppConfig,
-        package_with_user: &str,
-        debug: bool,
-    ) -> anyhow::Result<()> {
-        FAKE_PROPS.lock().unwrap().clear();
-        IS_FULL_MODE.store(false, std::sync::atomic::Ordering::Relaxed);
-
-        // Build 字段伪装已在 do_handle_app_specialize 的模式分发前完成，无需重复调用
-
-        if let Err(err) = apply_cpu_spoof(api, merged, package_with_user, debug) {
-            error!("Failed to apply CPU spoof: {err:?}");
-        } else if debug && merged.cpuinfo_content.is_some() {
-            info!("CPU spoof applied for {package_with_user}");
-        }
-
-        api.set_option(ZygiskOption::DlCloseModuleLibrary);
-        Ok(())
-    }
-
     fn apply_full_mode(
         api: &mut ZygiskApi<V4>,
         env: &mut EnvUnowned,
@@ -266,14 +241,14 @@ impl MyModule {
         Ok(())
     }
 
-    fn apply_resetprop_mode(
+    fn apply_companion_mode(
         api: &mut ZygiskApi<V4>,
         package_name: &str,
         merged: &MergedAppConfig,
         debug: bool,
     ) -> anyhow::Result<()> {
         if debug {
-            info!("Resetprop mode: using companion process");
+            info!("Companion mode: using companion process");
         }
 
         let prop_map = Config::build_merged_property_map_for_resetprop(merged);
@@ -281,7 +256,13 @@ impl MyModule {
         spoof_system_props_via_companion(api, &prop_map, &delete_props, package_name)?;
 
         if debug {
-            info!("Resetprop spoofing completed");
+            info!("Companion property spoofing completed");
+        }
+
+        if let Err(err) = apply_cpu_spoof(api, merged, package_name, debug) {
+            error!("Failed to apply CPU spoof: {err:?}");
+        } else if debug && merged.cpuinfo_content.is_some() {
+            info!("CPU spoof applied for {package_name}");
         }
 
         FAKE_PROPS.lock().unwrap().clear();
@@ -294,18 +275,16 @@ impl MyModule {
 #[derive(Clone, Copy)]
 enum SpoofMode {
     Lite,
-    Cpu,
     Full,
-    Resetprop,
+    Companion,
 }
 
 impl SpoofMode {
     fn from_mode_str(value: &str) -> Self {
         match value {
             "lite" => Self::Lite,
-            "cpu" => Self::Cpu,
             "full" => Self::Full,
-            "resetprop" => Self::Resetprop,
+            "companion" => Self::Companion,
             other => {
                 error!("Mode '{other}' not fully supported, falling back to 'lite' mode");
                 Self::Lite

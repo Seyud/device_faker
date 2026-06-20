@@ -26,11 +26,12 @@ default_mode = "lite"  # Recommended: Lite mode (better stealth)
   - May be detected
   - Use only when lite is insufficient
 
-- `"resetprop"` - Resetprop mode
-  - Uses resetprop tool to modify properties
+- `"companion"` - Companion mode
+  - Uses the companion process to modify properties through resetprop
   - Supports modifying read-only properties
   - Supports custom properties and property emptying/deletion
-  - Before an app enters resetprop mode, `getprop` is used to backup original values; the daemon automatically restores them using resetprop after exiting or switching to another app
+  - Spoofs `/proc/cpuinfo` when a CPU preset or custom CPU info is configured
+  - Before an app enters companion mode, `getprop` is used to back up original values; companion automatically restores them after exit or app switching
 
 ### default_force_denylist_unmount (Global Default Unmount Denylist)
 
@@ -159,7 +160,7 @@ model = "SM-S9280"
 ### App Configuration Field Description
 
 **Field to System Property Mapping**:
-| Field | Lite Mode | Full Mode (SystemProperties) | Description |
+| Field | Lite Mode | Full/Companion Modes (SystemProperties) | Description |
 |------|----------|------------------------------|------|
 | `manufacturer` | `Build.MANUFACTURER` | + `ro.product.manufacturer` | Manufacturer (e.g., Xiaomi, Samsung) |
 | `brand` | `Build.BRAND` | + `ro.product.brand` | Brand (e.g., Redmi, nubia) |
@@ -170,7 +171,7 @@ model = "SM-S9280"
 | `build_id` | `Build.ID` | + `ro.build.id` etc. | Build ID (e.g., UKQ1.230917.001) |
 | `name` | ❌ | `ro.product.name` + `ro.product.device` | Codename (e.g., xuanyuan) |
 | `marketname` | ❌ | `ro.product.marketname` | Marketing Name (e.g., REDMI K90 Pro Max) |
-| `characteristics` | ❌ | `ro.build.characteristics` | Characteristics (e.g., tablet) - Full mode only |
+| `characteristics` | ❌ | `ro.build.characteristics` | Characteristics (e.g., tablet) |
 | `android_version` | `Build.VERSION.RELEASE` | + `ro.build.version.release` etc. | Android Version (e.g., 15, 14) |
 | `sdk_int` | `Build.VERSION.SDK_INT` | + `ro.build.version.sdk` etc. | SDK Version (e.g., 35, 34) |
 | `custom_props` | ❌ | ✅ | Custom property mapping table |
@@ -185,7 +186,7 @@ model = "SM-S9280"
 **Custom Properties Fields**:
 | Field | Description |
 |------|------|
-| `custom_props` | Custom property mapping table, full/resetprop modes only |
+| `custom_props` | Custom property mapping table, full/companion modes only |
 
 **Configuration Metadata Fields** (Display only, does not affect spoofing):
 | Field | Description |
@@ -204,9 +205,9 @@ model = "SM-S9280"
 - All fields are optional except `package`
 - When using template's `packages`, no need to write [[apps]] (automatic application)
 - Fields in [[apps]] override template configuration
-- `name` and `marketname` only take effect in **full mode** (affect SystemProperties)
-- `name` field spoofs both `ro.product.name` and `ro.product.device` in full mode
-- `characteristics` field only takes effect in **full mode**
+- `name` and `marketname` only take effect in **full/companion modes** (affect SystemProperties)
+- `name` field spoofs both `ro.product.name` and `ro.product.device` in full/companion modes
+- `characteristics` field only takes effect in **full/companion modes**
 - `android_version` and `sdk_int` take effect in **all modes**
 - In **lite mode**, only `manufacturer`, `brand`, `model`, `device`, `product`, `fingerprint`, `build_id`, `android_version`, `sdk_int` take effect
 
@@ -218,7 +219,7 @@ model = "SM-S9280"
 |------|------------|-------------------|
 | lite | `ID` | ❌ |
 | full | `ID` | `ro.build.id`, `ro.system.build.id`, `ro.vendor.build.id`, `ro.product.build.id` |
-| resetprop | `ID` | `ro.build.id`, `ro.system.build.id`, `ro.vendor.build.id`, `ro.product.build.id` |
+| companion | `ID` | `ro.build.id`, `ro.system.build.id`, `ro.vendor.build.id`, `ro.product.build.id` |
 
 ## Android Version Spoofing
 
@@ -246,9 +247,9 @@ sdk_int = 33
 |------|-------------------|----------|
 | lite | `RELEASE`, `SDK_INT` | ❌ |
 | full | `RELEASE`, `SDK_INT` | `ro.build.version.release`, `ro.build.version.sdk` etc. |
-| resetprop | `RELEASE`, `SDK_INT` | `ro.build.version.release`, `ro.build.version.sdk` etc. |
+| companion | `RELEASE`, `SDK_INT` | `ro.build.version.release`, `ro.build.version.sdk` etc. |
 
-**Complete System Property List** (full/resetprop modes):
+**Complete System Property List** (full/companion modes):
 - `ro.build.version.release`
 - `ro.system.build.version.release`
 - `ro.vendor.build.version.release`
@@ -260,12 +261,12 @@ sdk_int = 33
 
 ## Custom Properties
 
-**full/resetprop modes** both support custom properties, allowing setting any system property:
+**full/companion modes** both support custom properties, allowing setting any system property:
 
 ```toml
 [[apps]]
 package = "com.custom.app"
-mode = "resetprop"
+mode = "companion"
 manufacturer = "Custom"
 
 # Custom properties
@@ -290,7 +291,7 @@ Support using special marker values to perform special operations:
 ```toml
 [[apps]]
 package = "com.example.app"
-mode = "resetprop"
+mode = "companion"
 manufacturer = "Google"
 brand = "__EMPTY__"           # Set brand to empty string
 model = "__DELETE__"          # Delete model property
@@ -304,20 +305,21 @@ model = "__DELETE__"          # Delete model property
 
 ## Mode Comparison
 
-| Feature | Lite Mode ⭐ | Full Mode | Resetprop Mode |
+| Feature | Lite Mode ⭐ | Full Mode | Companion Mode |
 |------|-------------|-----------|----------------|
 | Build Class Spoofing | ✅ | ✅ | ✅ |
 | SystemProperties Spoofing | ❌ | ✅ | ✅ |
-| Characteristics Spoofing | ❌ | ✅ | ❌ |
+| Characteristics Spoofing | ❌ | ✅ | ✅ |
 | Read-only Property Modification | ❌ | ❌ | ✅ |
 | Custom Properties | ❌ | ✅ | ✅ |
 | Property Emptying/Deletion | ❌ | ✅ | ✅ |
 | Android Version Spoofing | ✅ | ✅ | ✅ |
 | SDK Version Spoofing | ✅ | ✅ | ✅ |
-| Module Unloadable | ✅ | ❌ | ❌ |
-| Stealth | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ |
+| CPU Info Spoofing | ❌ | ❌ | ✅ |
+| Module Unloadable | ✅ | ❌ | ✅ |
+| Stealth | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ |
 | Detection Risk | Very Low | Lower | Lower |
-| Recommendation | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ |
+| Recommendation | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ |
 
 ## How to Choose a Mode?
 
@@ -334,7 +336,8 @@ model = "__DELETE__"          # Delete model property
 - Need to spoof characteristics (e.g., QQ tablet mode)
 - Need custom properties
 
-**Use resetprop mode**:
+**Use companion mode**:
 - Need to modify read-only properties
 - Need to delete or empty certain properties
 - Need complete custom property support
+- Need to spoof `/proc/cpuinfo`

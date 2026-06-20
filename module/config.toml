@@ -8,7 +8,7 @@
 # 全局默认模式（推荐使用 lite 以增强隐蔽性）
 # - "lite": 轻量模式，只修改 Build 类，完成后卸载内存（不易被检测）⭐ 推荐
 # - "full": 完整模式，伪装 Build + SystemProperties（功能完整，但可能被检测）
-# - "resetprop": 使用 resetprop 工具修改属性（持续伪装）
+# - "companion": 使用 companion 进程伪装系统属性，并可选伪装 /proc/cpuinfo
 default_mode = "lite"
 
 # CPU 伪装预设表
@@ -267,12 +267,16 @@ manufacturer = "vivo"
 # 【字段生效范围】⚠️
 # lite 模式（默认）：
 #   ✅ manufacturer, brand, model, device, product, fingerprint, build_id
-#   ❌ name, marketname, characteristics（仅 full 模式生效）
+#   ❌ name, marketname, characteristics（full/companion 模式生效）
 #
 # full 模式：
 #   ✅ 所有字段都生效
 #   ⭐ name 字段会同时伪装 ro.product.name 和 ro.product.device
 #   ⭐ characteristics 在 native 层伪装
+#
+# companion 模式：
+#   ✅ Build 字段和系统属性都生效，可选伪装 /proc/cpuinfo
+#   ⭐ 完成后卸载模块，属性恢复和 CPU 清理由 companion 负责
 #
 # 【模式说明】
 #
@@ -281,7 +285,7 @@ manufacturer = "vivo"
 # ├──────────┼────────────┼──────────────┼────────────┼──────────────┤
 # │  lite ⭐ │     ✅     │      ❌      │     ✅     │  ⭐⭐⭐⭐⭐  │
 # │  full    │     ✅     │      ✅      │     ❌     │  ⭐⭐⭐⭐      │
-# │ resetprop│     ✅     │      ✅      │     ❌     │  ⭐⭐⭐        │
+# │ companion│     ✅     │      ✅      │     ✅     │  ⭐⭐⭐⭐      │
 # └──────────┴────────────┴──────────────┴────────────┴──────────────┘
 #
 # 【lite 模式】（默认，推荐）⭐
@@ -299,11 +303,12 @@ manufacturer = "vivo"
 # - ⚠️ 缺点：模块驻留内存，可能被某些应用检测到
 # - 适用场景：需要完全伪装 SystemProperties 的特殊应用
 #
-# 【resetprop 模式】
-# - 使用 resetprop 工具修改系统属性
-# - ✅ 优点：可以修改只读属性
+# 【companion 模式】
+# - 使用 companion 进程修改系统属性，并在配置 CPU 预设时伪装 /proc/cpuinfo
+# - 完成后立即卸载模块，属性恢复和 CPU 挂载清理由 companion 负责
+# - ✅ 优点：可以修改只读属性，并支持 CPU 信息伪装
 #
 # 推荐策略：
 # 1. 默认所有应用使用 lite 模式（不设置 mode 字段）
 # 2. 只有当某个应用在 lite 模式下仍能检测到真实机型时，才为其单独设置 mode = "full"
-# 3. 需要伪装 characteristics 的应用使用 full 模式
+# 3. 需要 resetprop 属性伪装或 CPU 伪装的应用使用 companion 模式

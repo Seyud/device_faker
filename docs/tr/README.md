@@ -22,7 +22,7 @@ Zygisk tabanlı, farklı uygulamalar için farklı cihaz modellerini yapılandı
 * 🎭 **Üç Mod Desteği**:
     * **Lite Mod**: Hafif ve düşük iz bırakan sahteleştirme.
     * **Full Mod**: Kapsamlı cihaz sahteleştirme.
-    * **Resetprop Modu**: Salt okunur sistem özelliklerini değiştirmeyi destekler.
+    * **Companion Modu**: Sistem özelliklerini ve CPU bilgisini taklit eder.
 * 🌐 **WebUI Yönetimi**: Yapılandırmaları kolayca yönetebilmeniz için grafiksel bir web arayüzü sunar.
 
 

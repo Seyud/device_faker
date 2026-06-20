@@ -1,4 +1,4 @@
-export type SpoofMode = 'lite' | 'cpu' | 'full' | 'resetprop'
+export type SpoofMode = 'lite' | 'full' | 'companion'
 export type OnlineTemplateSource = 'gitee' | 'github'
 export type OnlineTemplateLoadState = 'idle' | 'loading' | 'ready' | 'error'
 export type OnlineTemplateDetailsState = 'idle' | 'loading' | 'partial' | 'complete' | 'error'

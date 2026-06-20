@@ -36,7 +36,7 @@ pub struct DeviceTemplate {
     /// SDK 版本伪装（如 35, 34）
     #[serde(default)]
     pub sdk_int: Option<u32>,
-    /// 自定义属性映射表（仅 full/resetprop 模式支持）
+    /// 自定义属性映射表（仅 full/companion 模式支持）
     #[serde(default)]
     pub custom_props: Option<HashMap<String, String>>,
     /// 是否为匹配的应用强制执行 FORCE_DENYLIST_UNMOUNT（默认继承全局设置）
@@ -83,7 +83,7 @@ pub struct AppConfig {
     /// SDK 版本伪装（如 35, 34）
     #[serde(default)]
     pub sdk_int: Option<u32>,
-    /// 自定义属性映射表（仅 full/resetprop 模式支持）
+    /// 自定义属性映射表（仅 full/companion 模式支持）
     #[serde(default)]
     pub custom_props: Option<HashMap<String, String>>,
     /// 是否为该应用强制执行 FORCE_DENYLIST_UNMOUNT（默认继承全局设置）
@@ -92,7 +92,7 @@ pub struct AppConfig {
     /// 工作模式：
     /// - "lite": 只修改 Build 类（轻量模式，可卸载模块）
     /// - "full": Build + SystemProperties Hook（完整模式，不可卸载）
-    /// - "resetprop": 使用 resetprop 工具修改属性（需要 Root，不可卸载）
+    /// - "companion": Build + companion resetprop + 可选 CPU 伪装（可卸载模块）
     #[serde(default)]
     pub mode: Option<String>,
     /// CPU 伪装预设名称（引用 [cpu_presets]）
@@ -105,7 +105,7 @@ pub struct AppConfig {
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
-    /// 全局默认模式："lite", "full" 或 "resetprop"
+    /// 全局默认模式："lite", "full" 或 "companion"
     #[serde(default = "default_mode")]
     pub default_mode: String,
     /// 是否默认启用 FORCE_DENYLIST_UNMOUNT（避免模块挂载痕迹）
@@ -217,7 +217,7 @@ impl Config {
     }
 
     /// 构建合并配置的系统属性映射
-    /// 注意：仅用于 full 模式的 SystemProperties Hook 和 resetprop 模式
+    /// 注意：仅用于 full 模式的 SystemProperties Hook 和 companion 模式
     /// 空字符串会被忽略，不会添加到映射中
     /// __DELETE__ 标记的属性会被记录到 delete_props 中
     pub fn build_merged_property_map(merged: &MergedAppConfig) -> HashMap<String, String> {
@@ -331,7 +331,7 @@ impl Config {
         map
     }
 
-    /// 构建需要删除的属性列表（用于 resetprop 模式）
+    /// 构建需要删除的属性列表（用于 companion 模式）
     pub fn build_delete_props_list(merged: &MergedAppConfig) -> Vec<String> {
         let mut delete_props = Vec::new();
 
@@ -393,7 +393,7 @@ impl Config {
         delete_props
     }
 
-    /// 构建用于 resetprop 模式的系统属性映射
+    /// 构建用于 companion 模式的系统属性映射
     pub fn build_merged_property_map_for_resetprop(
         merged: &MergedAppConfig,
     ) -> HashMap<String, String> {

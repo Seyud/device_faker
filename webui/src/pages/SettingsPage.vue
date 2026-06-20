@@ -73,9 +73,8 @@
         </div>
         <el-select v-model="defaultMode" class="setting-control" @change="onModeChange">
           <el-option :label="t('settings.module.default_mode.lite')" value="lite" />
-          <el-option :label="t('settings.module.default_mode.cpu')" value="cpu" />
           <el-option :label="t('settings.module.default_mode.full')" value="full" />
-          <el-option :label="t('settings.module.default_mode.resetprop')" value="resetprop" />
+          <el-option :label="t('settings.module.default_mode.companion')" value="companion" />
         </el-select>
       </div>
 
@@ -166,7 +165,7 @@ import { useSettingsStore } from '../stores/settings'
 import { execCommand, readFile } from '../utils/ksu'
 import { useI18n } from '../utils/i18n'
 import { toast } from 'kernelsu-alt'
-import type { Template } from '../types'
+import type { SpoofMode, Template } from '../types'
 import {
   convertZipOnDevice,
   createDeviceTempPath,
@@ -200,7 +199,7 @@ function onLanguageChange(value: string) {
 }
 
 async function onModeChange(value: string) {
-  configStore.config.default_mode = value as 'lite' | 'cpu' | 'full' | 'resetprop'
+  configStore.config.default_mode = value as SpoofMode
   try {
     await configStore.saveConfig()
     toast(t('settings.messages.default_mode_updated'))
@@ -315,7 +314,7 @@ async function saveConvertedTemplate() {
 // 监听配置变化（只创建一次监听器）
 watch(
   () => configStore.config.default_mode,
-  (newMode: 'lite' | 'cpu' | 'full' | 'resetprop' | undefined) => {
+  (newMode: SpoofMode | undefined) => {
     if (newMode && defaultMode.value !== newMode) {
       defaultMode.value = newMode
     }

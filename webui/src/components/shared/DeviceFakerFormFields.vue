@@ -74,9 +74,8 @@
       style="width: 100%"
     >
       <el-option :label="t('templates.options.mode_lite')" value="lite" />
-      <el-option :label="t('templates.options.mode_cpu')" value="cpu" />
       <el-option :label="t('templates.options.mode_full')" value="full" />
-      <el-option :label="t('templates.options.mode_resetprop')" value="resetprop" />
+      <el-option :label="t('templates.options.mode_companion')" value="companion" />
     </el-select>
   </el-form-item>
 

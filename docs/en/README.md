@@ -19,7 +19,7 @@ A device model spoofing module based on Zygisk that can configure different devi
 - 🛡️ **Safe and Reliable**: Based on Zygisk framework, modular design
 - 📝 **Simple Configuration**: Using TOML format configuration files, easy to edit
 - ⚡ **Performance Optimized**: Only takes effect on configured applications, does not affect other applications
-- 🎭 **Triple Mode**: lite mode (lightweight stealth) / full mode (complete spoofing) / resetprop mode (supports read-only property modification)
+- 🎭 **Triple Mode**: lite mode (lightweight stealth) / full mode (complete spoofing) / companion mode (properties and CPU spoofing)
 - 🌐 **WebUI Management**: Provides graphical interface for convenient configuration management
 
 ## WebUI Features 🖥️

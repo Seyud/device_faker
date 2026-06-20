@@ -10,7 +10,7 @@ import type {
 
 type UnknownRecord = Record<string, unknown>
 
-const VALID_MODES: SpoofMode[] = ['lite', 'cpu', 'full', 'resetprop']
+const VALID_MODES: SpoofMode[] = ['lite', 'full', 'companion']
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
