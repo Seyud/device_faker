@@ -3,15 +3,19 @@ use std::{
     fs::{self, OpenOptions},
     io::{Read, Write},
     os::unix::net::UnixStream,
+    path::Path,
     sync::Mutex,
     thread,
     time::{Duration, Instant},
 };
 
+use anyhow::Context;
 use log::{error, info, warn};
 use prop_rs_android::{resetprop::ResetProp, sys_prop};
 use serde::{Deserialize, Serialize};
 use zygisk_api::api::{V4, ZygiskApi};
+
+const CONFIG_PATH: &str = "/data/adb/device_faker/config/config.toml";
 
 // ── Companion 侧激活会话跟踪 ─────────────────────────────────────────────────
 //
@@ -52,6 +56,9 @@ pub struct WriteLogRequest {
     pub lines: Vec<String>,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ReadConfigRequest {}
+
 pub fn spoof_system_props_via_companion(
     api: &mut ZygiskApi<V4>,
     prop_map: &HashMap<String, String>,
@@ -82,6 +89,20 @@ pub fn spoof_system_props_via_companion(
     // Zygisk 模块侧不再需要 ACTIVE_RESET_SESSION。
 
     Ok(())
+}
+
+pub fn load_config_via_companion(api: &mut ZygiskApi<V4>) -> anyhow::Result<Option<String>> {
+    let request = CompanionRequest::ReadConfig(ReadConfigRequest {});
+    let response = send_companion_command(api, &request)?;
+    if response.status != 0 {
+        anyhow::bail!(
+            response
+                .message
+                .unwrap_or_else(|| "companion failed to read config".to_string())
+        );
+    }
+
+    Ok(response.config_content)
 }
 
 pub fn send_companion_command(
@@ -168,6 +189,32 @@ pub fn handle_companion_request(stream: &mut UnixStream) {
             if let Err(e) = write_companion_response(stream, &response) {
                 warn!("Failed to write companion response: {e}");
             }
+        }
+        CompanionRequest::ReadConfig(_) => {
+            let response = match read_config() {
+                Ok(config_content) => CompanionResponse::ok_with_config(config_content),
+                Err(err) => {
+                    error!("Companion failed to read config: {err}");
+                    CompanionResponse::err(err.to_string())
+                }
+            };
+            if let Err(e) = write_companion_response(stream, &response) {
+                warn!("Failed to write companion response: {e}");
+            }
+        }
+    }
+}
+
+fn read_config() -> anyhow::Result<Option<String>> {
+    read_config_file(Path::new(CONFIG_PATH))
+}
+
+fn read_config_file(path: &Path) -> anyhow::Result<Option<String>> {
+    match fs::read_to_string(path) {
+        Ok(content) => Ok(Some(content)),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(err) => {
+            Err(err).with_context(|| format!("Failed to read config at {}", path.display()))
         }
     }
 }
@@ -754,6 +801,7 @@ pub enum CompanionRequest {
     CpuSpoof(CpuSpoofRequest),
     CpuSpoofUnmount(CpuSpoofUnmountRequest),
     WriteLog(WriteLogRequest),
+    ReadConfig(ReadConfigRequest),
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -761,6 +809,7 @@ pub struct CompanionResponse {
     pub status: i32,
     pub message: Option<String>,
     pub backups: Option<HashMap<String, String>>,
+    pub config_content: Option<String>,
 }
 
 impl CompanionResponse {
@@ -769,6 +818,7 @@ impl CompanionResponse {
             status: 0,
             message: None,
             backups: None,
+            config_content: None,
         }
     }
 
@@ -777,6 +827,7 @@ impl CompanionResponse {
             status: -1,
             message: Some(msg.into()),
             backups: None,
+            config_content: None,
         }
     }
 
@@ -785,6 +836,16 @@ impl CompanionResponse {
             status: 0,
             message: None,
             backups: Some(backups),
+            config_content: None,
+        }
+    }
+
+    pub fn ok_with_config(config_content: Option<String>) -> Self {
+        Self {
+            status: 0,
+            message: None,
+            backups: None,
+            config_content,
         }
     }
 }
@@ -793,4 +854,100 @@ impl CompanionResponse {
 struct PropBackup {
     key: String,
     original_value: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        env,
+        path::PathBuf,
+        process,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use super::*;
+
+    struct TempConfigFile {
+        path: PathBuf,
+    }
+
+    impl TempConfigFile {
+        fn new(name: &str) -> Self {
+            let timestamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock before UNIX epoch")
+                .as_nanos();
+            Self {
+                path: env::temp_dir().join(format!(
+                    "device_faker_{name}_{}_{}",
+                    process::id(),
+                    timestamp
+                )),
+            }
+        }
+    }
+
+    impl Drop for TempConfigFile {
+        fn drop(&mut self) {
+            let _ = fs::remove_file(&self.path);
+        }
+    }
+
+    #[test]
+    fn read_config_file_reads_current_contents_each_time() -> anyhow::Result<()> {
+        let file = TempConfigFile::new("reload");
+
+        fs::write(&file.path, "manufacturer = \"first\"")?;
+        assert_eq!(
+            read_config_file(&file.path)?,
+            Some("manufacturer = \"first\"".to_string())
+        );
+
+        fs::write(&file.path, "manufacturer = \"second\"")?;
+        assert_eq!(
+            read_config_file(&file.path)?,
+            Some("manufacturer = \"second\"".to_string())
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn read_config_file_returns_none_when_config_is_missing() -> anyhow::Result<()> {
+        let file = TempConfigFile::new("missing");
+
+        assert_eq!(read_config_file(&file.path)?, None);
+
+        Ok(())
+    }
+
+    #[test]
+    fn read_config_uses_existing_ipc_framing() -> anyhow::Result<()> {
+        let (mut client, mut companion) = UnixStream::pair()?;
+        let request = CompanionRequest::ReadConfig(ReadConfigRequest {});
+        let request_payload = serde_json::to_vec(&request)?;
+
+        client.write_all(&(request_payload.len() as u32).to_le_bytes())?;
+        client.write_all(&request_payload)?;
+
+        assert!(matches!(
+            read_companion_request(&mut companion)?,
+            CompanionRequest::ReadConfig(_)
+        ));
+
+        let response = CompanionResponse::ok_with_config(Some("debug = true".to_string()));
+        write_companion_response(&mut companion, &response)?;
+
+        let mut len_buf = [0u8; 4];
+        client.read_exact(&mut len_buf)?;
+        let response_len = u32::from_le_bytes(len_buf) as usize;
+        let mut response_payload = vec![0u8; response_len];
+        client.read_exact(&mut response_payload)?;
+        let response: CompanionResponse = serde_json::from_slice(&response_payload)?;
+
+        assert_eq!(response.status, 0);
+        assert_eq!(response.config_content.as_deref(), Some("debug = true"));
+
+        Ok(())
+    }
 }

@@ -494,3 +494,65 @@ impl MergedAppConfig {
         config.cpu_presets.get(preset_name).cloned()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Config;
+
+    #[test]
+    fn package_with_user_config_has_priority_over_package_config() {
+        let config = Config::from_toml(
+            r#"
+                [[apps]]
+                package = "com.example.app"
+                manufacturer = "base"
+
+                [[apps]]
+                package = "com.example.app@10"
+                manufacturer = "work-profile"
+            "#,
+        )
+        .expect("test config should parse");
+
+        let merged = config
+            .get_merged_config("com.example.app@10")
+            .or_else(|| config.get_merged_config("com.example.app"))
+            .expect("config should match");
+
+        assert_eq!(merged.manufacturer.as_deref(), Some("work-profile"));
+    }
+
+    #[test]
+    fn direct_app_config_has_priority_over_template_config() {
+        let config = Config::from_toml(
+            r#"
+                [templates.example]
+                packages = ["com.example.app", "com.example.template"]
+                manufacturer = "template"
+                model = "template-model"
+
+                [[apps]]
+                package = "com.example.app"
+                manufacturer = "app"
+            "#,
+        )
+        .expect("test config should parse");
+
+        let direct = config
+            .get_merged_config("com.example.app")
+            .expect("direct app config should match");
+        assert_eq!(direct.manufacturer.as_deref(), Some("app"));
+        assert_eq!(direct.model, None);
+
+        let template = config
+            .get_merged_config("com.example.template")
+            .expect("template config should match");
+        assert_eq!(template.manufacturer.as_deref(), Some("template"));
+        assert_eq!(template.model.as_deref(), Some("template-model"));
+    }
+
+    #[test]
+    fn malformed_toml_returns_an_error() {
+        assert!(Config::from_toml("[[apps]").is_err());
+    }
+}

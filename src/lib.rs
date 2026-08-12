@@ -8,22 +8,18 @@ mod cpu_spoof;
 mod file_logger;
 mod hooks;
 
-use std::{collections::HashMap, fs, path::Path};
-
-use anyhow::Context;
 use companion::{handle_companion_request, spoof_system_props_via_companion};
 use config::Config;
 use cpu_spoof::{apply_cpu_spoof, apply_cpu_spoof_unmount};
 use hooks::hook_build_fields;
 use jni::{EnvUnowned, errors::ThrowRuntimeExAndDefault};
 use log::{LevelFilter, error, info};
+use std::collections::HashMap;
 use zygisk_api::{
     ZygiskModule,
     api::{V4, ZygiskApi, v4::ZygiskOption},
     raw::ZygiskRaw,
 };
-
-const CONFIG_PATH: &str = "/data/adb/device_faker/config/config.toml";
 
 #[derive(Default)]
 struct MyModule;
@@ -99,7 +95,7 @@ impl MyModule {
         // companion 侧现在自己管理会话状态和恢复逻辑；
         // Zygisk 模块侧不再需要跨应用恢复（ACTIVE_RESET_SESSION 已移除）。
 
-        let config = match load_config() {
+        let config = match load_config(api) {
             Ok(Some(cfg)) => cfg,
             Ok(None) => {
                 api.set_option(ZygiskOption::DlCloseModuleLibrary);
@@ -279,13 +275,13 @@ impl MyModule {
     }
 }
 
-fn load_config() -> anyhow::Result<Option<Config>> {
-    if !Path::new(CONFIG_PATH).exists() {
+fn load_config(api: &mut ZygiskApi<V4>) -> anyhow::Result<Option<Config>> {
+    // specialize 阶段运行在 zygote domain，部分 SELinux 策略不允许其遍历 /data/adb。
+    // 文件由 root companion 读取，解析与应用匹配仍保留在当前进程。
+    let Some(config_content) = companion::load_config_via_companion(api)? else {
         return Ok(None);
-    }
+    };
 
-    let config_content = fs::read_to_string(CONFIG_PATH)
-        .with_context(|| format!("Failed to read config at {CONFIG_PATH}"))?;
     let config = Config::from_toml(&config_content)?;
     Ok(Some(config))
 }
