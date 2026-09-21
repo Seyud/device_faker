@@ -1,20 +1,26 @@
 //! COW 属性伪造引擎。
 //!
-//! - 已有属性：bionic `__system_property_find()` + COW remap + 原地 patch
-//! - 不存在属性：COW remap + `MmapPropArea::emplace()` 在私有副本中插入 trie 节点
+//! - 已有属性：bionic `__system_property_find()` 定位所属属性区 → 取该区的
+//!   **进程私有副本** → 在副本上原地 patch
+//! - 不存在属性：在同一个私有副本中用 `MmapPropArea::emplace()` 插入 trie 节点
 //!   （不依赖 companion resetprop，per-process 隔离零驻留）
+//!
+//! 迁移点（`ContextNode.prop_area_`）由 `prop_backend` 在运行期解析得出，不硬编码偏移。
+//! 解析失败时**降级回原地 COW**（maps 会重新出现 `rw-p`），并打 WARN 说明原因。
 //!
 //! # 实现说明
 //!
-//! 不存在属性的插入通过 `MmapPropArea`（ksu_props）在 COW-remapped 内存上操作：
+//! 副本通过 `MmapPropArea`（ksu_props）操作：
 //! - `transmute((ptr, len))` → `MmapMut` 构造 `MmapPropArea`（MmapMut = `{ptr, len}` on Unix）
-//! - `ManuallyDrop` 防止 `MmapPropArea` drop → `MmapMut` drop → munmap（COW 副本需保持存活）
+//! - `ManuallyDrop` 防止 `MmapPropArea` drop → `MmapMut` drop → munmap（副本需保持存活）
 //! - `emplace()` 内部 bump allocator 分配 trie 节点 + prop_info，Release store 发布指针
 
 use std::{cell::RefCell, collections::HashMap};
 
 use log::{info, warn};
 use prop_rs_android::mmap_prop_area::{MmapPropArea, PROP_INFO_LONG_FLAG};
+
+use crate::prop_backend::PropBackend;
 
 // ── bionic 类型定义 ────────────────────────────────────────────────────────
 
@@ -42,6 +48,26 @@ thread_local! {
     #[allow(clippy::missing_const_for_thread_local)]
     static PREFIX_AREA_CACHE: RefCell<HashMap<String, Vec<String>>> = RefCell::new(HashMap::new());
 }
+
+// ── 属性区私有副本────────────────────────────────────────────────────
+
+/// 一个真实属性区的进程私有副本。副本随进程存活，**不回收**
+/// （bionic 的 context 节点长期指向它，提前 munmap 会悬空）。
+struct AreaClone {
+    /// 原始 `/dev/__properties__/*` 映射起始地址
+    orig_start: usize,
+    clone_start: usize,
+    clone_end: usize,
+}
+
+thread_local! {
+    #[allow(clippy::missing_const_for_thread_local)]
+    static AREA_CLONES: RefCell<Vec<AreaClone>> = const { RefCell::new(Vec::new()) };
+}
+
+/// 副本 memfd 的名字。**必须中性**：maps 里出现的任何模块相关字样
+/// （device_faker / zygisk / libdf …）本身就会变成新的指纹。
+const CLONE_MEMFD_NAME: &std::ffi::CStr = c"prop-area";
 
 // ── bionic 符号加载 ────────────────────────────────────────────────────────
 
@@ -102,11 +128,25 @@ pub fn apply_cow_spoof(
     }
     let mappings = collect_prop_area_mappings();
 
+    // 把被 patch 的属性区迁移到进程私有副本，原始 /dev/__properties__/*
+    // 映射保持 r--s（消除 maps 里 rw-p 的指纹）。
+    // 解析失败 → 降级回原地 COW（maps 会重新出现 rw-p），日志说明原因。
+    let backend = match PropBackend::resolve() {
+        Ok(b) => Some(b),
+        Err(e) => {
+            warn!(
+                "prop backend resolve failed: {e:#}; falling back to in-place COW \
+                 (/dev/__properties__/* will show as rw-p in maps)"
+            );
+            None
+        }
+    };
+
     // 预初始化 serial area（供所有 update() 调用共享）
-    let mut serial_pa = match cow_serial_area(&mappings) {
+    let mut serial_pa = match prepare_serial_area(&mappings, backend.is_some()) {
         Ok(pa) => Some(pa),
         Err(e) => {
-            warn!("Failed to COW serial area: {e}, patches will use fallback");
+            warn!("Failed to prepare serial area: {e}, patches will use fallback");
             None
         }
     };
@@ -128,11 +168,18 @@ pub fn apply_cow_spoof(
             continue;
         }
 
-        match cow_patch_existing(find_fn, key, value, &mappings, serial_pa.as_deref_mut()) {
+        match cow_patch_existing(
+            find_fn,
+            key,
+            value,
+            &mappings,
+            serial_pa.as_deref_mut(),
+            backend.as_ref(),
+        ) {
             Ok(true) => cow_patched += 1,
             Ok(false) => {
-                // 属性不存在 → 尝试在 COW prop_area 中插入新 trie 节点
-                match cow_patch_new(key, value, &mappings, find_fn) {
+                // 属性不存在 → 尝试在私有副本中插入新 trie 节点
+                match cow_patch_new(key, value, &mappings, backend.as_ref()) {
                     Ok(true) => cow_inserted += 1,
                     Ok(false) => {
                         unfound.push((key.to_string(), value.to_string()));
@@ -146,6 +193,9 @@ pub fn apply_cow_spoof(
             Err(e) => warn!("COW patch failed for '{key}': {e}"),
         }
     }
+
+    // 全部 patch 完成：副本降回只读，形态与正常共享只读属性区一致。
+    seal_area_clones();
 
     if cow_patched > 0 || cow_inserted > 0 {
         info!(
@@ -174,9 +224,8 @@ fn cow_patch_existing(
     value: &str,
     mappings: &[PropAreaMapping],
     mut serial_pa: Option<&mut MmapPropArea>,
+    backend: Option<&PropBackend>,
 ) -> anyhow::Result<bool> {
-    use memmap2::MmapMut;
-
     let ckey =
         std::ffi::CString::new(key).map_err(|_| anyhow::anyhow!("invalid property name: {key}"))?;
     let prop_ptr = unsafe { find_fn(ckey.as_ptr()) };
@@ -184,41 +233,29 @@ fn cow_patch_existing(
         return Ok(false);
     }
 
-    // ── Phase 1: patch __system_property_find 返回的 area ────────────────
-    if ensure_prop_area_private(prop_ptr as *const u8, mappings).is_err() {
+    // 该属性所属的**原始**属性区（prop_ptr 可能已落在私有副本里）。
+    let primary_orig = original_area_start(prop_ptr as usize, mappings);
+
+    // ── Phase 1: patch __system_property_find 返回的区（即其私有副本）──
+    let Ok((area_addr, area_size)) = writable_area_for(prop_ptr as usize, mappings, backend) else {
         return Ok(false);
-    }
-
-    let primary_mapping = mappings
-        .iter()
-        .find(|m| {
-            let addr = prop_ptr as usize;
-            addr >= m.start && addr < m.end
-        })
-        .ok_or_else(|| anyhow::anyhow!("mapping not found for prop_ptr"))?;
-
-    let size = primary_mapping.end - primary_mapping.start;
-    let ptr = primary_mapping.start as *mut u8;
-    let mmap_mut = unsafe { std::mem::transmute::<(*mut u8, usize), MmapMut>((ptr, size)) };
-    let mut area = std::mem::ManuallyDrop::new(MmapPropArea::new(mmap_mut)?);
+    };
+    let mut area = open_area(area_addr, area_size)?;
 
     let data_off = match area.find(key)? {
         Some(off) => off,
         None => {
-            // MmapPropArea::find 找不到，尝试直接用 prop_ptr offset
-            let prop_offset = (prop_ptr as usize) - primary_mapping.start;
             info!(
-                "COW Phase1: '{key}' MmapPropArea::find returned None in {path}, \
-                 prop_ptr offset={prop_offset:#x}, trying direct offset",
-                path = primary_mapping.path
+                "COW Phase1: '{key}' MmapPropArea::find returned None in area @{area_addr:#x} \
+                 (prop_ptr@{pp:#x})",
+                pp = prop_ptr as usize
             );
             return Ok(false);
         }
     };
 
     info!(
-        "COW Phase1: '{key}' found at offset={data_off:#x} in {path}, prop_ptr@{pp:#x}",
-        path = primary_mapping.path,
+        "COW Phase1: '{key}' found at offset={data_off:#x} in area @{area_addr:#x}, prop_ptr@{pp:#x}",
         pp = prop_ptr as usize
     );
 
@@ -230,8 +267,7 @@ fn cow_patch_existing(
     // 不变（旧 buffer 内容保留，并发读者不会读到撕裂值）。
     // 不再需要 remove+emplace：那样会丢弃原 prop_info 节点、改变 trie 布局，
     // 且缓存了 prop_info* 的读法会读到墓碑。
-    // 返回的 need_rebuild 表示旧 long buffer 成为孤儿；COW 是私有副本，随进程
-    // 消亡，无需 rebuild。
+    // 返回的 need_rebuild 表示旧 long buffer 成为孤儿；副本随进程消亡，无需 rebuild。
     let mut need_rebuild = false;
     area.update(data_off, value, pa, &mut need_rebuild)
         .map_err(|e| anyhow::anyhow!("COW Phase1: update '{key}' failed: {e}"))?;
@@ -240,32 +276,51 @@ fn cow_patch_existing(
     // OnePlus/OPPO 设备上 __system_property_find 返回 build_prop 指针，但 bionic 的
     // __system_property_get 按 prefix routing 读 build_odm_prop。需要 patch 所有包含
     // 该属性的 build area。
-    let primary_addr = prop_ptr as usize;
     let mut cross_patched = 0usize;
 
     for mapping in mappings {
         if !is_build_area(&mapping.path) {
             continue;
         }
-        // 跳过 Phase 1 已 patch 的 area
-        if primary_addr >= mapping.start && primary_addr < mapping.end {
+        // 跳过 Phase 1 已 patch 的区
+        if primary_orig == Some(mapping.start) {
             continue;
         }
-        let msize = mapping.end - mapping.start;
-        if msize < 128 {
+        if mapping.end - mapping.start < 128 {
             continue;
         }
-        if ensure_prop_area_private(mapping.start as *const u8, mappings).is_err() {
-            info!(
-                "COW cross-area: skip {p} (COW remap failed)",
-                p = mapping.path
-            );
+        // 先在**真实映射**上只读确认这个区确实含该 key —— 只有需要 patch 才值得
+        // 建私有副本（副本会让该区在本进程内冻结成快照）。
+        let Some(mut probe) = readonly_area(mapping) else {
             continue;
+        };
+        match probe.find(key) {
+            Ok(Some(_)) => {}
+            Ok(None) => {
+                info!("COW cross-area: '{key}' not found in {p}", p = mapping.path);
+                continue;
+            }
+            Err(e) => {
+                info!(
+                    "COW cross-area: '{key}' find error in {p}: {e}",
+                    p = mapping.path
+                );
+                continue;
+            }
         }
-        let mptr = mapping.start as *mut u8;
-        let mmap_mut = unsafe { std::mem::transmute::<(*mut u8, usize), MmapMut>((mptr, msize)) };
-        let mut cross_area = match MmapPropArea::new(mmap_mut) {
-            Ok(a) => std::mem::ManuallyDrop::new(a),
+
+        let (maddr, msize) = match writable_area_for_mapping(mapping, mappings, backend) {
+            Ok(v) => v,
+            Err(e) => {
+                info!(
+                    "COW cross-area: skip {p} (no writable area: {e})",
+                    p = mapping.path
+                );
+                continue;
+            }
+        };
+        let mut cross_area = match open_area(maddr, msize) {
+            Ok(a) => a,
             Err(e) => {
                 info!(
                     "COW cross-area: skip {p} (MmapPropArea::new failed: {e})",
@@ -294,7 +349,10 @@ fn cow_patch_existing(
                 }
             }
             Ok(None) => {
-                info!("COW cross-area: '{key}' not found in {p}", p = mapping.path);
+                info!(
+                    "COW cross-area: '{key}' lost in {p} clone",
+                    p = mapping.path
+                );
             }
             Err(e) => {
                 info!(
@@ -315,8 +373,12 @@ fn cow_patch_existing(
     Ok(true)
 }
 
-/// munmap `/dev/__properties__/*` 中路径匹配指定模式的映射。
+/// munmap `/dev/__properties__/*` 中路径匹配指定模式的映射（`hide_maps` 配置项）。
 /// 这些属性值为空，munmap 不影响任何功能。
+///
+/// **不会**卸载任何真实属性区映射（真实映射保留，副本另行建立）；
+/// 这里只处理用户显式配置的 `hide_maps` 模式。因此被 `hide_maps` 清掉的区不会再
+/// 参与后续克隆（`collect_prop_area_mappings` 已看不到它），行为与改动前一致。
 pub fn unmap_prop_areas(patterns: &[String]) {
     if patterns.is_empty() {
         return;
@@ -406,9 +468,245 @@ fn collect_prop_area_mappings() -> Vec<PropAreaMapping> {
     result
 }
 
-// ── COW remap ──────────────────────────────────────────────────────────────
+// ── 可写属性区：私有副本 / 降级原地 COW ─────────────────────────────────
 
-/// 确保 `prop_ptr` 所在的 `/dev/__properties__/*` 映射已被 COW remap。
+/// 构造某个可写属性区上的 `MmapPropArea` 视图（`ManuallyDrop`：区随进程存活）。
+///
+/// 调用方必须保证 `addr` 指向一个内容自洽的 `prop_area`（真实
+/// `/dev/__properties__/<ctx>` 映射，或本模块的逐字节副本）——`MmapPropArea::new`
+/// 校验失败时会 drop 掉 `MmapMut`（即 munmap 掉这块映射，而它并不归我们所有）。
+/// 现有调用点只传真实属性区与自身副本，`properties_serial` 同样是合法的 prop_area；
+/// `property_info` 不是，但它被 `is_build_area` / `context_area_path` 过滤在外。
+fn open_area(addr: usize, size: usize) -> anyhow::Result<std::mem::ManuallyDrop<MmapPropArea>> {
+    use memmap2::MmapMut;
+
+    let mmap_mut =
+        unsafe { std::mem::transmute::<(*mut u8, usize), MmapMut>((addr as *mut u8, size)) };
+    Ok(std::mem::ManuallyDrop::new(MmapPropArea::new(mmap_mut)?))
+}
+
+/// 只读探测某个真实属性区（不 COW、不克隆）。
+///
+/// 用于「这个区里到底有没有这个 key」的预判：先探测再决定是否值得建私有副本，
+/// 避免为无关的区白白克隆（每个副本都会让该区在本进程内冻结成快照）。
+fn readonly_area(mapping: &PropAreaMapping) -> Option<std::mem::ManuallyDrop<MmapPropArea>> {
+    open_area(mapping.start, mapping.end - mapping.start).ok()
+}
+
+/// `addr` 所属的**原始**属性区起始地址（若 `addr` 落在私有副本里，映射回原区）。
+fn original_area_start(addr: usize, mappings: &[PropAreaMapping]) -> Option<usize> {
+    let from_clone = AREA_CLONES.with(|c| {
+        c.borrow()
+            .iter()
+            .find(|cl| addr >= cl.clone_start && addr < cl.clone_end)
+            .map(|cl| cl.orig_start)
+    });
+    from_clone.or_else(|| {
+        mappings
+            .iter()
+            .find(|m| addr >= m.start && addr < m.end)
+            .map(|m| m.start)
+    })
+}
+
+/// 取包含 `addr` 的可写属性区，返回 `(区域起始地址, 大小)`。
+fn writable_area_for(
+    addr: usize,
+    mappings: &[PropAreaMapping],
+    backend: Option<&PropBackend>,
+) -> anyhow::Result<(usize, usize)> {
+    if let Some(range) = clone_range_containing(addr) {
+        return Ok(range);
+    }
+    let mapping = mappings
+        .iter()
+        .find(|m| addr >= m.start && addr < m.end)
+        .ok_or_else(|| anyhow::anyhow!("prop_info at {addr:#x} not in any prop area mapping"))?;
+    writable_area_for_mapping(mapping, mappings, backend)
+}
+
+/// 取某个**原始**属性区对应的可写区（已有副本直接复用，否则新建）。
+fn writable_area_for_mapping(
+    mapping: &PropAreaMapping,
+    mappings: &[PropAreaMapping],
+    backend: Option<&PropBackend>,
+) -> anyhow::Result<(usize, usize)> {
+    let size = mapping.end - mapping.start;
+    if let Some(range) = clone_range_of(mapping.start) {
+        return Ok(range);
+    }
+    match backend {
+        // 整块克隆 + 迁移 context 节点指针，原映射不动
+        Some(b) => {
+            // 同一份属性区文件在本进程里可能被映射多次（活跃/非活跃两套
+            // ContextsSerialized 各映射一遍）。只有被 context 节点引用的那一份
+            // 才值得克隆 —— 否则克隆出来也没有指针指向它，白 mmap/munmap 一轮。
+            if !b.references_area(mapping.start) {
+                anyhow::bail!(
+                    "no context node references {:#x} ({path})",
+                    mapping.start,
+                    path = mapping.path
+                );
+            }
+            Ok((create_area_clone(mapping, b)?, size))
+        }
+        // 降级：原地 COW remap（maps 里该区会变成 rw-p）
+        None => {
+            ensure_prop_area_private(mapping.start as *const u8, mappings)?;
+            Ok((mapping.start, size))
+        }
+    }
+}
+
+/// 已有副本按原区起始地址复用（顺带确保可写——`seal_area_clones` 之后需要）。
+fn clone_range_of(orig_start: usize) -> Option<(usize, usize)> {
+    AREA_CLONES
+        .with(|c| {
+            c.borrow()
+                .iter()
+                .find(|cl| cl.orig_start == orig_start)
+                .map(|cl| (cl.clone_start, cl.clone_end - cl.clone_start))
+        })
+        .map(|(start, size)| {
+            make_writable(start, size);
+            (start, size)
+        })
+}
+
+/// 已有副本按地址区间复用。
+fn clone_range_containing(addr: usize) -> Option<(usize, usize)> {
+    AREA_CLONES
+        .with(|c| {
+            c.borrow()
+                .iter()
+                .find(|cl| addr >= cl.clone_start && addr < cl.clone_end)
+                .map(|cl| (cl.clone_start, cl.clone_end - cl.clone_start))
+        })
+        .map(|(start, size)| {
+            make_writable(start, size);
+            (start, size)
+        })
+}
+
+fn make_writable(addr: usize, size: usize) {
+    let ret = unsafe {
+        libc::mprotect(
+            addr as *mut libc::c_void,
+            size,
+            libc::PROT_READ | libc::PROT_WRITE,
+        )
+    };
+    if ret != 0 {
+        warn!(
+            "mprotect(RW) on prop area clone @{addr:#x} failed: {err}",
+            err = std::io::Error::last_os_error()
+        );
+    }
+}
+
+/// patch 全部完成：把副本降回只读，形态与正常共享只读属性区一致（`r--s`）。
+fn seal_area_clones() {
+    AREA_CLONES.with(|c| {
+        for cl in c.borrow().iter() {
+            let size = cl.clone_end - cl.clone_start;
+            let ret = unsafe {
+                libc::mprotect(cl.clone_start as *mut libc::c_void, size, libc::PROT_READ)
+            };
+            if ret != 0 {
+                warn!(
+                    "mprotect(RO) on prop area clone @{:#x} failed: {err}",
+                    cl.clone_start,
+                    err = std::io::Error::last_os_error()
+                );
+            }
+        }
+    });
+}
+
+/// 把真实属性区整块复制到进程私有映射，并让 bionic 的 context 节点指向副本。
+///
+/// 原始 `/dev/__properties__/*` 映射**不做任何改动**（权限形态保持 `r--s`）。
+fn create_area_clone(mapping: &PropAreaMapping, backend: &PropBackend) -> anyhow::Result<usize> {
+    let size = mapping.end - mapping.start;
+    let fd = unsafe { libc::memfd_create(CLONE_MEMFD_NAME.as_ptr(), libc::MFD_CLOEXEC) };
+    if fd < 0 {
+        anyhow::bail!(
+            "memfd_create failed: {err}",
+            err = std::io::Error::last_os_error()
+        );
+    }
+    let result = build_area_clone(fd, mapping, size, backend);
+    unsafe { libc::close(fd) };
+    result
+}
+
+fn build_area_clone(
+    fd: i32,
+    mapping: &PropAreaMapping,
+    size: usize,
+    backend: &PropBackend,
+) -> anyhow::Result<usize> {
+    if unsafe { libc::ftruncate(fd, size as libc::off_t) } != 0 {
+        anyhow::bail!(
+            "ftruncate({size}) failed: {err}",
+            err = std::io::Error::last_os_error()
+        );
+    }
+
+    let ptr = unsafe {
+        libc::mmap(
+            std::ptr::null_mut(),
+            size,
+            libc::PROT_READ | libc::PROT_WRITE,
+            libc::MAP_SHARED,
+            fd,
+            0,
+        )
+    };
+    if ptr == libc::MAP_FAILED {
+        anyhow::bail!(
+            "mmap clone failed: {err}",
+            err = std::io::Error::last_os_error()
+        );
+    }
+
+    // 整块逐字节复制（header / trie / 全部 prop_info）。副本必须与原区完全一致，
+    // 否则 bionic 的 trie 遍历会读到错误节点。
+    unsafe { std::ptr::copy_nonoverlapping(mapping.start as *const u8, ptr as *mut u8, size) };
+
+    let clone = ptr as usize;
+    let nodes = backend.repoint_area(mapping.start, clone);
+    if nodes == 0 {
+        // 没有任何 context 节点引用这个区（正常情况下已被 `references_area`
+        // 预检挡掉），迁移无意义 —— 回滚，避免留下一个无人使用的私有映射。
+        unsafe { libc::munmap(ptr, size) };
+        anyhow::bail!("no context node references {:#x}", mapping.start);
+    }
+
+    AREA_CLONES.with(|c| {
+        c.borrow_mut().push(AreaClone {
+            orig_start: mapping.start,
+            clone_start: clone,
+            clone_end: clone + size,
+        })
+    });
+
+    info!(
+        "cloned prop area {path} [{start:#x}-{end:#x}] -> [{clone:#x}-{cend:#x}] ({nodes} context node(s) repointed)",
+        path = mapping.path,
+        start = mapping.start,
+        end = mapping.end,
+        cend = clone + size,
+    );
+    Ok(clone)
+}
+
+// ── 降级路径：原地 COW remap ───────────────────────────────────────────────
+
+/// 确保 `prop_ptr` 所在的 `/dev/__properties__/*` 映射已被原地 COW remap。
+///
+/// ⚠️ 这条路径会让该映射在 `/proc/self/maps` 里从 `r--s` 变成 `rw-p`，
+/// 仅在后端解析失败（`PropBackend::resolve` 返回 Err）时使用。
 fn ensure_prop_area_private(
     prop_ptr: *const u8,
     mappings: &[PropAreaMapping],
@@ -482,9 +780,40 @@ fn ensure_prop_area_private(
     Ok(())
 }
 
-// ── Serial area COW ──────────────────────────────────────────────────────
+// ── Serial area ──────────────────────────────────────────────────────────
 
-/// 找到 `properties_serial` mapping 并 COW remap，构造 `MmapPropArea`。
+/// 准备 `MmapPropArea::update()` 需要的 `serial_pa`。
+///
+/// - `private = true`（私有副本路径）：用一个**进程私有匿名区**承载 serial bump，
+///   真实 `/dev/__properties__/properties_serial` 映射保持 `r--s`（不再原地 COW）。
+///   bump 只影响本进程，与原先「COW remap 后 bump 落在私有副本」语义一致；
+///   进程内 `__system_property_wait_any` 读到的仍是真实全局 serial，
+///   不会因为我们的写入被伪唤醒。
+/// - 降级：沿用原地 COW remap。
+fn prepare_serial_area(
+    mappings: &[PropAreaMapping],
+    private: bool,
+) -> anyhow::Result<std::mem::ManuallyDrop<MmapPropArea>> {
+    if !private {
+        return cow_serial_area(mappings);
+    }
+
+    let serial_mapping = mappings
+        .iter()
+        .find(|m| m.path.ends_with("/properties_serial"))
+        .ok_or_else(|| anyhow::anyhow!("properties_serial mapping not found"))?;
+
+    // 只读访问原区（仅用于取 pa_size），实际写入落在匿名副本上。
+    let src = open_area(
+        serial_mapping.start,
+        serial_mapping.end - serial_mapping.start,
+    )?;
+    Ok(std::mem::ManuallyDrop::new(MmapPropArea::new_anon_from(
+        &src,
+    )?))
+}
+
+/// 找到 `properties_serial` mapping 并 COW remap，构造 `MmapPropArea`（降级路径）。
 ///
 /// `MmapPropArea::update()` 需要 `serial_pa` 来 bump global area serial + futex wake。
 /// COW-remap 后 bump 只影响当前进程的私有副本，不会错误通知其他进程。
@@ -563,7 +892,7 @@ fn context_area_path(key: &str) -> Option<String> {
     }
 }
 
-/// 尝试在 COW-remapped 的 prop_area 中为不存在的属性插入新 trie 节点。
+/// 尝试在可写属性区（私有副本 / 降级原地 COW）中为不存在的属性插入新 trie 节点。
 ///
 /// 目标 area 优先按 property context 路由解析（与 bionic 读取路径一致），
 /// 仅插入路由目标 area；sys_prop 不可用时降级为 SIBLING_PROBES 前缀探测。
@@ -571,10 +900,8 @@ fn cow_patch_new(
     key: &str,
     value: &str,
     mappings: &[PropAreaMapping],
-    _find_fn: FnSystemPropertyFind,
+    backend: Option<&PropBackend>,
 ) -> anyhow::Result<bool> {
-    use memmap2::MmapMut;
-
     let key_prefix = match key.rfind('.') {
         Some(end) => &key[..end],
         None => key,
@@ -617,19 +944,12 @@ fn cow_patch_new(
                 {
                     continue;
                 }
-                let size = mapping.end - mapping.start;
-                if size < 128 {
+                if mapping.end - mapping.start < 128 {
                     continue;
                 }
-                if ensure_prop_area_private(mapping.start as *const u8, mappings).is_err() {
+                // 只读探测即可（真正需要插入时才建副本）
+                let Some(mut area) = readonly_area(mapping) else {
                     continue;
-                }
-                let ptr = mapping.start as *mut u8;
-                let mmap_mut =
-                    unsafe { std::mem::transmute::<(*mut u8, usize), MmapMut>((ptr, size)) };
-                let mut area = match MmapPropArea::new(mmap_mut) {
-                    Ok(a) => std::mem::ManuallyDrop::new(a),
-                    Err(_) => continue,
                 };
                 let has_sibling = probes.iter().any(|p| matches!(area.find(p), Ok(Some(_))));
                 if has_sibling {
@@ -656,16 +976,11 @@ fn cow_patch_new(
             None => continue,
         };
 
-        if ensure_prop_area_private(mapping.start as *const u8, mappings).is_err() {
+        let Ok((addr, size)) = writable_area_for_mapping(mapping, mappings, backend) else {
             continue;
-        }
-
-        let size = mapping.end - mapping.start;
-        let ptr = mapping.start as *mut u8;
-        let mmap_mut = unsafe { std::mem::transmute::<(*mut u8, usize), MmapMut>((ptr, size)) };
-        let mut area = match MmapPropArea::new(mmap_mut) {
-            Ok(a) => std::mem::ManuallyDrop::new(a),
-            Err(_) => continue,
+        };
+        let Ok(mut area) = open_area(addr, size) else {
+            continue;
         };
 
         if let Ok(Some(_)) = area.find(key) {

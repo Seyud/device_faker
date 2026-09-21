@@ -185,7 +185,7 @@ All apps go through the same unified flow (no mode selection needed):
 ① JNI overwrite of Build static fields → ② COW or companion resetprop → ③ DPI spoofing → ④ DlClose unload
 ```
 
-- **COW (default)**: remaps the property-area file with mmap COW and overwrites property memory in place, covering native reads via `__system_property_get` / `__system_property_read_callback`; no GOT/PLT modification; **only affects the current process's** memory mapping; the module calls DlClose right after writing, leaving zero resident footprint
+- **COW (default)**: **only the current process is affected**; the module calls DlClose right after writing, leaving zero resident footprint
 - **Companion resetprop (`companion_resetprop = true`)**: all properties are written directly to the property area by the companion process (`skip_svc`, bypassing property_service), so **reads are consistent system-wide**; original values are restored automatically ~2 seconds after the app exits or goes to background, and re-applied on return to foreground
 
 ## Complete Configuration Example

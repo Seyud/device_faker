@@ -8,6 +8,7 @@ mod fg_observer;
 #[cfg(target_os = "android")]
 mod file_logger;
 mod hooks;
+mod prop_backend;
 
 use std::{collections::HashMap, fs, path::Path};
 
