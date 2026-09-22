@@ -103,6 +103,7 @@ import { toast } from 'kernelsu-alt'
 import type { InstalledApp, AppConfig } from '../../types'
 import { provideDeviceFakerForm } from '../../composables/useDeviceFakerForm'
 import DeviceFakerFormFields from '../shared/DeviceFakerFormFields.vue'
+import { runtimeConfigKeys } from '../../utils/package'
 
 interface TemplateOption {
   name: string
@@ -133,6 +134,25 @@ const hasTemplateConfig = ref(false)
 
 const originalCustomConfig = ref<AppConfig | null>(null)
 const originalTemplateName = ref<string | null>(null)
+/** 运行时命中的配置键（可能是 base@userId 或裸 base），删除/保存时用它而非列表展示名 */
+const resolvedConfigKey = ref<string | null>(null)
+
+function resolveConfigPackageKey(
+  packageName: string,
+  candidates: readonly string[]
+): string | null {
+  return runtimeConfigKeys(packageName).find((key) => candidates.includes(key)) ?? null
+}
+
+function templateHasPackage(templatePackages: readonly string[] | undefined, packageName: string) {
+  if (!templatePackages?.length) return false
+  return resolveConfigPackageKey(packageName, templatePackages) !== null
+}
+
+function filterOutRuntimeKeys(templatePackages: readonly string[], packageName: string): string[] {
+  const keys = new Set(runtimeConfigKeys(packageName))
+  return templatePackages.filter((p) => !keys.has(p))
+}
 
 const selectedTemplate = ref('')
 const templateSearch = ref('')
@@ -207,30 +227,42 @@ function syncFromExistingConfig() {
   if (!props.app) return
 
   templateSearch.value = ''
+  const packageName = props.app.packageName
+  const runtimeKeys = runtimeConfigKeys(packageName)
 
-  const appConfig = configStore.getApps().find((a) => a.package === props.app!.packageName)
+  const appConfig =
+    runtimeKeys
+      .map((key) => configStore.getApps().find((a) => a.package === key))
+      .find((a): a is AppConfig => Boolean(a)) ?? null
+
   if (appConfig) {
     hasCustomConfig.value = true
     originalCustomConfig.value = { ...appConfig }
+    resolvedConfigKey.value = appConfig.package
     fillFromAppConfig(appConfig)
   } else {
     hasCustomConfig.value = false
     originalCustomConfig.value = null
+    resolvedConfigKey.value = null
     resetForm()
   }
 
   let foundTemplateName: string | null = null
+  let foundTemplateKey: string | null = null
   for (const [name, template] of Object.entries(templates.value)) {
-    if (template.packages?.includes(props.app.packageName)) {
+    const key = resolveConfigPackageKey(packageName, template.packages ?? [])
+    if (key) {
       foundTemplateName = name
+      foundTemplateKey = key
       break
     }
   }
 
-  if (foundTemplateName) {
+  if (foundTemplateName && foundTemplateKey) {
     hasTemplateConfig.value = true
     originalTemplateName.value = foundTemplateName
     selectedTemplate.value = foundTemplateName
+    resolvedConfigKey.value ??= foundTemplateKey
   } else {
     hasTemplateConfig.value = false
     originalTemplateName.value = null
@@ -249,7 +281,8 @@ function syncFromExistingConfig() {
 async function removeCustomConfig() {
   if (!props.app) return
 
-  configStore.deleteApp(props.app.packageName)
+  const deleteKey = resolvedConfigKey.value ?? props.app.packageName
+  configStore.deleteApp(deleteKey)
   hasCustomConfig.value = false
   originalCustomConfig.value = null
   resetForm()
@@ -265,12 +298,14 @@ async function removeCustomConfig() {
 async function removeTemplateConfig() {
   if (!props.app) return
 
+  const packageName = props.app.packageName
   const allTemplates = configStore.getTemplates()
   for (const [name, template] of Object.entries(allTemplates)) {
-    if (template.packages?.includes(props.app.packageName)) {
-      template.packages = template.packages.filter((p: string) => p !== props.app!.packageName)
-      configStore.setTemplate(name, template)
-    }
+    if (!template.packages?.length) continue
+    if (!templateHasPackage(template.packages, packageName)) continue
+
+    template.packages = filterOutRuntimeKeys(template.packages, packageName)
+    configStore.setTemplate(name, template)
   }
 
   hasTemplateConfig.value = false
@@ -288,6 +323,10 @@ async function removeTemplateConfig() {
 async function saveAppConfig() {
   if (!props.app) return
 
+  const packageName = props.app.packageName
+  // 优先写回已命中的配置键，避免列表裸名与配置 @0 并存导致双写
+  const configKey = resolvedConfigKey.value ?? packageName
+
   if (hasTemplateConfig.value) {
     if (!selectedTemplate.value) {
       toast(t('apps.messages.select_template'))
@@ -297,9 +336,7 @@ async function saveAppConfig() {
     if (originalTemplateName.value && originalTemplateName.value !== selectedTemplate.value) {
       const oldTemplate = templates.value[originalTemplateName.value]
       if (oldTemplate && oldTemplate.packages) {
-        oldTemplate.packages = oldTemplate.packages.filter(
-          (p: string) => p !== props.app!.packageName
-        )
+        oldTemplate.packages = filterOutRuntimeKeys(oldTemplate.packages, packageName)
         configStore.setTemplate(originalTemplateName.value, oldTemplate)
       }
     }
@@ -309,26 +346,37 @@ async function saveAppConfig() {
       if (!template.packages) {
         template.packages = []
       }
-      if (!template.packages.includes(props.app.packageName)) {
-        template.packages.push(props.app.packageName)
+      // 若已有 runtime 命中键则复用；否则写入当前列表包名
+      const existingKey = resolveConfigPackageKey(packageName, template.packages)
+      const keyToWrite = existingKey ?? configKey
+      if (!template.packages.includes(keyToWrite)) {
+        template.packages.push(keyToWrite)
         configStore.setTemplate(selectedTemplate.value, template)
       }
     }
   } else {
     const allTemplates = configStore.getTemplates()
     for (const [name, template] of Object.entries(allTemplates)) {
-      if (template.packages?.includes(props.app.packageName)) {
-        template.packages = template.packages.filter((p: string) => p !== props.app!.packageName)
-        configStore.setTemplate(name, template)
-      }
+      if (!template.packages?.length) continue
+      if (!templateHasPackage(template.packages, packageName)) continue
+
+      template.packages = filterOutRuntimeKeys(template.packages, packageName)
+      configStore.setTemplate(name, template)
     }
   }
 
   if (hasCustomConfig.value) {
-    const appConfig = toAppConfig(props.app.packageName)
+    const appConfig = toAppConfig(configKey)
+    // 若配置键与展示名不同，清理可能残留的展示名条目
+    if (configKey !== packageName) {
+      configStore.deleteApp(packageName)
+    }
     configStore.setApp(appConfig)
   } else {
-    configStore.deleteApp(props.app.packageName)
+    for (const key of runtimeConfigKeys(packageName)) {
+      configStore.deleteApp(key)
+    }
+    configStore.deleteApp(packageName)
   }
 
   try {

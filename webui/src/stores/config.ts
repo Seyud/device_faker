@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import type { Config, Template, AppConfig } from '../types'
 import { readFile, writeFile, fileExists, mkdir } from '../utils/ksu'
 import { parse as parseToml, stringify as stringifyToml } from 'smol-toml'
-import { normalizePackageName } from '../utils/package'
+import { anyConfigApplies, runtimeConfigKeys } from '../utils/package'
 import { toast } from 'kernelsu-alt'
 import { useI18n } from '../utils/i18n'
 import {
@@ -345,70 +345,38 @@ export const useConfigStore = defineStore('config', () => {
     }
   }
 
-  // 检查包名是否已配置
-  function isPackageConfigured(packageName: string): boolean {
-    const hasUserSuffix = /@\d+$/.test(packageName)
-
-    // 先尝试精确匹配，保留多用户后缀
+  function collectConfigPackageNames(): string[] {
+    const packages: string[] = []
+    for (const app of apps.value) {
+      packages.push(app.package)
+    }
     for (const template of Object.values(templates.value)) {
-      if (template.packages?.includes(packageName)) {
-        return true
+      if (template.packages) {
+        packages.push(...template.packages)
       }
     }
-
-    if (apps.value.some((a) => a.package === packageName)) {
-      return true
-    }
-
-    // 仅当调用方带有 userId 后缀时，才做归一化匹配以兼容旧配置
-    if (!hasUserSuffix) {
-      return false
-    }
-
-    const normalized = normalizePackageName(packageName)
-
-    for (const template of Object.values(templates.value)) {
-      if (template.packages?.some((pkg) => normalizePackageName(pkg) === normalized)) {
-        return true
-      }
-    }
-
-    return apps.value.some((a) => normalizePackageName(a.package) === normalized)
+    return packages
   }
 
-  // 获取包名的配置
+  // 检查包名是否已配置（与 Rust 运行时查找键一致，禁止 @userId 互相串）
+  function isPackageConfigured(packageName: string): boolean {
+    return anyConfigApplies(collectConfigPackageNames(), packageName)
+  }
+
+  // 获取包名的配置（按 runtime 优先级：先 base@userId，再裸 base）
   function getPackageConfig(
     packageName: string
   ): (Template & { source: string }) | AppConfig | null {
-    const hasUserSuffix = /@\d+$/.test(packageName)
-
-    // 先精确匹配
-    const exactApp = apps.value.find((a) => a.package === packageName)
-    if (exactApp) {
-      return exactApp
-    }
-
-    for (const [name, template] of Object.entries(templates.value)) {
-      if (template.packages?.includes(packageName)) {
-        return { ...template, source: name }
+    for (const key of runtimeConfigKeys(packageName)) {
+      const exactApp = apps.value.find((a) => a.package === key)
+      if (exactApp) {
+        return exactApp
       }
-    }
 
-    // 仅当调用方带有 userId 后缀时，才做归一化匹配（向后兼容旧配置）
-    if (!hasUserSuffix) {
-      return null
-    }
-
-    const normalized = normalizePackageName(packageName)
-
-    const normalizedApp = apps.value.find((a) => normalizePackageName(a.package) === normalized)
-    if (normalizedApp) {
-      return normalizedApp
-    }
-
-    for (const [name, template] of Object.entries(templates.value)) {
-      if (template.packages?.some((pkg) => normalizePackageName(pkg) === normalized)) {
-        return { ...template, source: name }
+      for (const [name, template] of Object.entries(templates.value)) {
+        if (template.packages?.includes(key)) {
+          return { ...template, source: name }
+        }
       }
     }
 

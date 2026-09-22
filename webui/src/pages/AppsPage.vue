@@ -40,7 +40,12 @@ import { useConfigStore } from '../stores/config'
 import { useSettingsStore } from '../stores/settings'
 import { useModalHistory } from '../composables/useModalHistory'
 import { useI18n } from '../utils/i18n'
-import { normalizePackageName, parsePackageUser } from '../utils/package'
+import {
+  installedLookupKeys,
+  normalizePackageName,
+  parsePackageUser,
+  runtimeConfigKeys,
+} from '../utils/package'
 import type { InstalledApp } from '../types'
 
 type FilterType = 'all' | 'configured'
@@ -121,28 +126,23 @@ const resolvedPackageInfo = computed(() => appsStore.resolvedPackageInfo)
 
 const installedPackageState = computed(() => {
   const exactPackages = new Set<string>()
-  const normalizedPackages = new Set<string>()
 
   for (const app of installedApps.value) {
     if (app.installed === false) continue
     exactPackages.add(app.packageName)
-    normalizedPackages.add(normalizePackageName(app.packageName))
   }
 
   return {
     exactPackages,
-    normalizedPackages,
   }
 })
 
 const configuredPackageState = computed(() => {
   const exactPackages = new Set<string>()
-  const normalizedPackages = new Set<string>()
   const configuredAppsMap = new Map<string, InstalledApp>()
 
   for (const appConfig of configStore.getApps()) {
     exactPackages.add(appConfig.package)
-    normalizedPackages.add(normalizePackageName(appConfig.package))
     configuredAppsMap.set(appConfig.package, {
       packageName: appConfig.package,
       appName: appConfig.package,
@@ -154,7 +154,6 @@ const configuredPackageState = computed(() => {
     if (!template.packages) continue
     for (const pkg of template.packages) {
       exactPackages.add(pkg)
-      normalizedPackages.add(normalizePackageName(pkg))
       if (configuredAppsMap.has(pkg)) continue
 
       configuredAppsMap.set(pkg, {
@@ -168,33 +167,22 @@ const configuredPackageState = computed(() => {
   return {
     packages: Array.from(exactPackages),
     exactPackages,
-    normalizedPackages,
     configuredApps: Array.from(configuredAppsMap.values()),
   }
 })
 
 function isConfiguredPackage(packageName: string) {
-  if (configuredPackageState.value.exactPackages.has(packageName)) {
-    return true
-  }
-
-  if (!/@\d+$/.test(packageName)) {
-    return false
-  }
-
-  return configuredPackageState.value.normalizedPackages.has(normalizePackageName(packageName))
+  // 与 Rust 一致：配置项须精确命中 runtime 查找键（base@userId 或裸 base）。
+  // 禁止把 @0/@998/@999 归一化后互相认成已配置。
+  return runtimeConfigKeys(packageName).some((key) =>
+    configuredPackageState.value.exactPackages.has(key)
+  )
 }
 
 function isInstalledPackage(packageName: string) {
-  if (installedPackageState.value.exactPackages.has(packageName)) {
-    return true
-  }
-
-  if (!/@\d+$/.test(packageName)) {
-    return false
-  }
-
-  return installedPackageState.value.normalizedPackages.has(normalizePackageName(packageName))
+  return installedLookupKeys(packageName).some((key) =>
+    installedPackageState.value.exactPackages.has(key)
+  )
 }
 
 function getResolvedPackageInfo(packageName: string) {
