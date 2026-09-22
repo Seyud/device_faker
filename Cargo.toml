@@ -17,7 +17,7 @@ toml = { version = "1.0", features = ["parse"] }
 zygisk-api = { git = "https://github.com/Seyud/zygisk-api-rs.git" }
 serde_json = "1.0.149"
 libc = "0.2"
-prop-rs-android = { git = "https://github.com/Kernel-SU/ksu_props.git", version = "0.2.0" }
+prop-rs-android = { git = "https://github.com/KernelSU2/ksu_props", rev = "ddb6ee7294467f7f25bad2118e9e24eee104144b" }
 memmap2 = "0.9.11"
 # 前台 UidObserver：root binder 注册 ActivityManager.registerUidObserver，
 # 事件驱动接收 PROCESS_STATE_TOP 变化。
