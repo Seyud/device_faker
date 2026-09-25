@@ -83,6 +83,37 @@
       </div>
 
       <div class="follow-row">
+        <div class="follow-row-icon gradient-icon-6">
+          <Globe :size="20" />
+        </div>
+        <div class="follow-row-body">
+          <span class="follow-row-label">{{ t('status.follow.website') }}</span>
+          <button class="repo-link" type="button" @click="openExternalUrl(websiteUrl)">
+            <span class="brand-logo website-logo" aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M2 12h20"></path>
+                <path
+                  d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"
+                ></path>
+              </svg>
+            </span>
+            <span class="repo-link-text">
+              <span>{{ t('status.follow.website_action_primary') }}</span>
+              <span>{{ t('status.follow.website_action_secondary') }}</span>
+            </span>
+          </button>
+        </div>
+      </div>
+
+      <div class="follow-row">
         <div class="follow-row-icon gradient-icon-4">
           <svg viewBox="0 0 24 24" role="img" width="20" height="20" aria-hidden="true">
             <path :d="siGithub.path" fill="currentColor" />
@@ -117,7 +148,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { siGithub, siQq, siTelegram } from 'simple-icons'
-import { MessageCircleMore } from '@lucide/vue'
+import { Globe, MessageCircleMore } from '@lucide/vue'
 import { useConfigStore } from '../../stores/config'
 import { useI18n } from '../../utils/i18n'
 import { execCommand } from '../../utils/ksu'
@@ -140,6 +171,7 @@ const qqGroupUrl =
   'https://qun.qq.com/universal-share/share?ac=1&authKey=ls4nlfcsF%2Bxp5SPnVsXRgpbeV1axPZb%2FmJCMXms6ZCHjgAwvOyl1LV%2BDNVL1btgL&busi_data=eyJncm91cENvZGUiOiI4NTQxODgyNTIiLCJ0b2tlbiI6IlE1WVVyZTZxUXVjZUtGUUxWSGFmbzkvMEd3UWNRSiszdklTZDhHejU0RDRyT0lWRTFqS3d4UGJSM1ltaXpkS3MiLCJ1aW4iOiIxMTA1NzgzMDMzIn0%3D&data=IbvhTKt9HwCSsCsl_610-rQ8p6H2NgLmxhEKkMcn-BMWPb86jygWBZJfWLQGm7J8LwpVV2yhPafxTMXYGkjRVA&svctype=4&tempid=h5_group_info'
 const telegramIntentUrl = 'tg://resolve?domain=device_faker'
 const telegramWebUrl = 'https://t.me/device_faker'
+const websiteUrl = 'https://seyud.github.io/device_faker/'
 const repositoryUrl = 'https://github.com/Seyud/device_faker'
 const authorGithubUrl = 'https://github.com/Seyud'
 
@@ -257,6 +289,12 @@ function openAuthorLink(platform: string) {
   background: linear-gradient(135deg, #a855f7 0%, #c084fc 100%);
   color: white;
   box-shadow: 0 4px 12px rgba(168, 85, 247, 0.3);
+}
+
+.gradient-icon-6 {
+  background: linear-gradient(135deg, #14b8a6 0%, #06b6d4 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(20, 184, 166, 0.3);
 }
 
 .author-icon-wrapper {
@@ -383,6 +421,10 @@ function openAuthorLink(platform: string) {
 }
 
 .github-logo {
+  color: currentColor;
+}
+
+.website-logo {
   color: currentColor;
 }
 
