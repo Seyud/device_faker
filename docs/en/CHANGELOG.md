@@ -1,5 +1,32 @@
 # 📝 Changelog
 
+## ⬆️[v1.5.0 → v1.6.0] - 2026-09-26
+
+### 🆕 New Features
+- 🏷️ Added Build.BOARD / Build.SOC_MODEL camouflage at Build layer
+- 📅 Added security_patch security patch date spoofing field
+- 🆔 Added dedicated display_id / incremental spoofing fields
+- 📐 Added per-app DPI spoofing support
+- ✏️ WebUI custom property spoofing is now editable
+- 📦 Installer script Zygisk detection compatible with unique Zygisk implementations
+- 🔗 Follow dialog added official website entry
+
+### 🐛 Bug Fixes
+- 🔄 Fixed two foreground gating failures — cold-start race and stale packages.list snapshot
+- 🌐 Fixed massive online template library load failures
+- 🧹 Fixed residual key values when switches are set back to default
+- 🎯 Fixed multi-open package "configured" status misdetection
+- 🔒 Property areas now use process-private copies, eliminating rw-p fingerprint in maps
+- ⏱️ Background restore sped up to 0.5s
+
+### ⚡ Improvements
+- 🏎️ Long property values support in-place update without delete+recreate
+- 🤖 rsbinder upgraded to 0.10, compatible with Android 10~17
+- 🗑️ Removed CPU spoofing feature
+- 🔇 Module and companion fully silent when debug is off
+- 🚀 WebUI critical path slimmed and app list performance optimized
+- 💾 Installer script keeps existing config by default
+
 ## ⬆️[v1.4.0 → v1.5.0] - 2026-08-01
 
 ### 🆕 New Features
