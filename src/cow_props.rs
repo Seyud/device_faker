@@ -65,9 +65,10 @@ thread_local! {
     static AREA_CLONES: RefCell<Vec<AreaClone>> = const { RefCell::new(Vec::new()) };
 }
 
-/// 副本 memfd 的名字。**必须中性**：maps 里出现的任何模块相关字样
-/// （device_faker / zygisk / libdf …）本身就会变成新的指纹。
-const CLONE_MEMFD_NAME: &std::ffi::CStr = c"prop-area";
+/// 副本匿名映射的 VMA 名。**必须中性**：maps 里出现的任何模块相关字样
+/// （device_faker / zygisk / libdf / prop-area / memfd …）本身就会变成新的指纹。
+/// 用 linker_alloc——bionic/linker 本就大量产出 `r--p [anon:linker_alloc]`，同形易混。
+const CLONE_ANON_NAME: &std::ffi::CStr = c"linker_alloc";
 
 // ── bionic 符号加载 ────────────────────────────────────────────────────────
 
@@ -604,72 +605,171 @@ fn make_writable(addr: usize, size: usize) {
     }
 }
 
-/// patch 全部完成：把副本降回只读，形态与正常共享只读属性区一致（`r--s`）。
+/// patch 全部完成：尽量 seal 成只读；命名与 mprotect 在部分内核上互相打架，
+/// 最终形态是 `r--p [anon:linker_alloc]` 或退回 `rw-p [anon:linker_alloc]`（stock 同有）。
 fn seal_area_clones() {
     AREA_CLONES.with(|c| {
         for cl in c.borrow().iter() {
             let size = cl.clone_end - cl.clone_start;
-            let ret = unsafe {
-                libc::mprotect(cl.clone_start as *mut libc::c_void, size, libc::PROT_READ)
-            };
-            if ret != 0 {
-                warn!(
-                    "mprotect(RO) on prop area clone @{:#x} failed: {err}",
-                    cl.clone_start,
-                    err = std::io::Error::last_os_error()
-                );
+            let addr = cl.clone_start as *mut libc::c_void;
+            // 必须在仍可写时命名（RO 后 PR_SET 会变成 [anon:<fault>]）
+            name_anon_vma(addr, size);
+            let named_rw = anon_vma_name_is(addr, CLONE_ANON_NAME.to_str().unwrap_or(""));
+            let _ = unsafe { libc::mprotect(addr, size, libc::PROT_READ) };
+            let named_ro = anon_vma_name_is(addr, CLONE_ANON_NAME.to_str().unwrap_or(""));
+            info!("seal clone @{addr:p} size={size:#x} named_rw={named_rw} named_ro={named_ro}");
+            if !named_ro {
+                let _ = unsafe { libc::mprotect(addr, size, libc::PROT_READ | libc::PROT_WRITE) };
+                set_anon_name(addr, size);
+                let named_rw2 = anon_vma_name_is(addr, CLONE_ANON_NAME.to_str().unwrap_or(""));
+                info!("seal clone @{addr:p} fallback rw named={named_rw2}");
             }
         }
     });
 }
 
-/// 把真实属性区整块复制到进程私有映射，并让 bionic 的 context 节点指向副本。
+/// 把真实属性区整块复制到进程私有匿名映射，并让 bionic 的 context 节点指向副本。
 ///
 /// 原始 `/dev/__properties__/*` 映射**不做任何改动**（权限形态保持 `r--s`）。
+/// 副本用 MAP_PRIVATE|MAP_ANONYMOUS：seal 后呈 `r--p`，再视内核能力命名成
+/// `[anon:linker_alloc]`（≥5.17）或保持无名（空路径，与 stock 无名 `r--p` 同形）。
+/// （不用 MAP_SHARED|ANON——那会被内核挂成 `/dev/zero (deleted)`，反而非典型；
+/// 也不 bind-mount 伪路径——maple 等 mountinfo 扫描直接命中。）
 fn create_area_clone(mapping: &PropAreaMapping, backend: &PropBackend) -> anyhow::Result<usize> {
     let size = mapping.end - mapping.start;
-    let fd = unsafe { libc::memfd_create(CLONE_MEMFD_NAME.as_ptr(), libc::MFD_CLOEXEC) };
-    if fd < 0 {
-        anyhow::bail!(
-            "memfd_create failed: {err}",
-            err = std::io::Error::last_os_error()
-        );
-    }
-    let result = build_area_clone(fd, mapping, size, backend);
-    unsafe { libc::close(fd) };
-    result
-}
-
-fn build_area_clone(
-    fd: i32,
-    mapping: &PropAreaMapping,
-    size: usize,
-    backend: &PropBackend,
-) -> anyhow::Result<usize> {
-    if unsafe { libc::ftruncate(fd, size as libc::off_t) } != 0 {
-        anyhow::bail!(
-            "ftruncate({size}) failed: {err}",
-            err = std::io::Error::last_os_error()
-        );
-    }
-
     let ptr = unsafe {
         libc::mmap(
             std::ptr::null_mut(),
             size,
             libc::PROT_READ | libc::PROT_WRITE,
-            libc::MAP_SHARED,
-            fd,
+            libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
+            -1,
             0,
         )
     };
     if ptr == libc::MAP_FAILED {
         anyhow::bail!(
-            "mmap clone failed: {err}",
+            "anonymous mmap clone failed: {err}",
             err = std::io::Error::last_os_error()
         );
     }
 
+    // 命名放在 seal 之后（部分内核 mprotect 会丢掉 VMA name）。
+    build_area_clone(ptr, mapping, size, backend)
+}
+
+/// 命名能力：0=未知，1=可用，2=不可用。
+static ANON_NAME_OK: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+/// 尽力给副本打上中性 VMA 名；**探测失败则永久回退无名**（不 `uname`、不版本判断）。
+///
+/// 不能拿正式副本做试验：部分 OEM 4.x 内核上 `prctl` 看似成功，maps 却变成
+/// `[anon:<fault>]`，且清名抹不掉——比 stock 无名更扎眼。先用一次性探针映射试。
+fn name_anon_vma(ptr: *mut libc::c_void, size: usize) {
+    use std::sync::atomic::Ordering;
+    match ANON_NAME_OK.load(Ordering::Relaxed) {
+        1 => {
+            set_anon_name(ptr, size);
+        }
+        2 => {}
+        _ => {
+            let ok = probe_anon_naming();
+            info!("VMA anon naming probe: ok={ok}");
+            if ok {
+                ANON_NAME_OK.store(1, Ordering::Relaxed);
+                set_anon_name(ptr, size);
+            } else {
+                ANON_NAME_OK.store(2, Ordering::Relaxed);
+                warn!("VMA anon naming unusable on this kernel; clones stay unnamed");
+            }
+        }
+    }
+}
+
+/// 一次性探针：临时匿名页上试命名，核对 maps；失败则丢弃，不碰真实副本。
+fn probe_anon_naming() -> bool {
+    let size = 0x20000usize; // 与属性区副本同尺寸（128KiB）
+    let page = unsafe {
+        libc::mmap(
+            std::ptr::null_mut(),
+            size,
+            libc::PROT_READ | libc::PROT_WRITE,
+            libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
+            -1,
+            0,
+        )
+    };
+    if page == libc::MAP_FAILED {
+        return false;
+    }
+    let set_ok = set_anon_name(page, size);
+    let name_ok = anon_vma_name_is(page, CLONE_ANON_NAME.to_str().unwrap_or(""));
+    info!("VMA anon naming probe page={page:p} set_ok={set_ok} name_ok={name_ok}");
+    unsafe { libc::munmap(page, size) };
+    set_ok && name_ok
+}
+
+/// 设置 VMA 名；返回 prctl 是否成功。
+///
+/// 名字必须放在**不随 Zygisk DlClose 卸载**的堆上：部分内核对
+/// `PR_SET_VMA_ANON_NAME` 不 `strndup` 而是持用户指针，so 卸载后
+/// maps 读名 fault，显示成 `[anon:<fault>]`。
+fn set_anon_name(ptr: *mut libc::c_void, size: usize) -> bool {
+    let ret = unsafe {
+        libc::prctl(
+            libc::PR_SET_VMA,
+            libc::PR_SET_VMA_ANON_NAME,
+            ptr as libc::c_ulong,
+            size as libc::c_ulong,
+            anon_name_ptr() as libc::c_ulong,
+        )
+    };
+    ret == 0
+}
+
+/// 进程堆上的一次性名字缓冲（故意泄漏，活到进程结束）。
+fn anon_name_ptr() -> *const u8 {
+    static NAME: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let p = NAME.load(std::sync::atomic::Ordering::Relaxed);
+    if p != 0 {
+        return p as *const u8;
+    }
+    let mut buf = CLONE_ANON_NAME
+        .to_bytes_with_nul()
+        .to_vec()
+        .into_boxed_slice();
+    let np = buf.as_mut_ptr() as usize;
+    std::mem::forget(buf);
+    NAME.store(np, std::sync::atomic::Ordering::Relaxed);
+    np as *const u8
+}
+
+/// 核对 `/proc/self/maps` 里该 VMA 的名字是否等于 `want`。
+fn anon_vma_name_is(ptr: *const libc::c_void, want: &str) -> bool {
+    let start = ptr as usize;
+    let Ok(maps) = std::fs::read_to_string("/proc/self/maps") else {
+        return false;
+    };
+    let prefix = format!("{start:x}-");
+    for line in maps.lines() {
+        if !line.starts_with(&prefix) {
+            continue;
+        }
+        if let Some(pos) = line.rfind("[anon:") {
+            let name = line[pos + 6..].trim_end_matches(']');
+            return name == want;
+        }
+        return false;
+    }
+    false
+}
+
+fn build_area_clone(
+    ptr: *mut libc::c_void,
+    mapping: &PropAreaMapping,
+    size: usize,
+    backend: &PropBackend,
+) -> anyhow::Result<usize> {
     // 整块逐字节复制（header / trie / 全部 prop_info）。副本必须与原区完全一致，
     // 否则 bionic 的 trie 遍历会读到错误节点。
     unsafe { std::ptr::copy_nonoverlapping(mapping.start as *const u8, ptr as *mut u8, size) };
