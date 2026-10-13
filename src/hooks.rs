@@ -5,7 +5,7 @@ use jni::{
     strings::JNIStr,
 };
 
-use crate::config::MergedAppConfig;
+use crate::config::{MergedAppConfig, NumberSetting};
 
 /// Build 字段的有效伪装值：与 config::field_value 相同的归一化——
 /// 未设置/空串/`__DELETE__` 返回 None（跳过 hook），`__EMPTY__` 归一化为空串。
@@ -107,7 +107,10 @@ fn hook_version_fields(
         set_build_field(env, &version_class, jni_str!("RELEASE"), android_version)?;
     }
 
-    if let Some(sdk_int) = merged_config.sdk_int {
+    // `__DELETE__`（NumberSetting::Delete）不 hook 该字段：与字符串字段的
+    // `__DELETE__` 语义一致——只由 delete_props 列表在 companion 侧删除属性，
+    // Java 层字段保持系统原值。
+    if let Some(sdk_int) = merged_config.sdk_int.and_then(NumberSetting::value) {
         set_build_int_field(env, &version_class, jni_str!("SDK_INT"), sdk_int as i32)?;
     }
 

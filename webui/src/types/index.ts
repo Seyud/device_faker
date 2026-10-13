@@ -8,6 +8,13 @@ export interface CustomProps {
   [key: string]: string
 }
 
+/**
+ * 数值型设置（目前只有 sdk_int）也支持 TOML 的字符串标记 `__DELETE__`
+ * （删除对应属性族，见 docs/CONFIG.md「特殊标记值」）。
+ * WebUI 表单只输入整数；该标记为手改 TOML 的写法，此处仅保证保存/同步时不被丢弃。
+ */
+export type NumericSetting = number | '__DELETE__'
+
 // 设备信息接口
 export interface DeviceInfo {
   manufacturer?: string
@@ -27,7 +34,7 @@ export interface DeviceInfo {
   security_patch?: string
   characteristics?: string
   android_version?: string
-  sdk_int?: number
+  sdk_int?: NumericSetting
   dpi?: number
   custom_props?: CustomProps
   force_denylist_unmount?: boolean

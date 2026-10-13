@@ -20,7 +20,9 @@ The following fields can be used in templates or `[[apps]]`. Each field drives b
 | `characteristics` | — (properties only) | `ro.build.characteristics` | Characteristics (e.g. tablet) |
 
 ::: info What are partition variants?
-They are the 6 properties `ro.product.{odm,vendor,system,system_ext,product,bootimage}.<field>`. Bionic property reads route by prefix to partition-specific property areas — OnePlus/OPPO and other devices read these variants, so writing them all keeps reads consistent across devices.
+They are `ro.product.{odm,vendor,system,system_ext,product,bootimage,system_dlkm,vendor_dlkm,odm_dlkm}.<field>`. Bionic property reads route by prefix to partition-specific property areas — OnePlus/OPPO and other devices read these variants, so writing them all keeps reads consistent across devices.
+
+`system_dlkm` / `vendor_dlkm` / `odm_dlkm` are **"fill only if already present"**: these dynamic kernel module partitions only export these copies on some Android 13+ ROMs, so keys that do not exist on the device are not written (otherwise they would appear as enumerable "ghost properties" in a full `getprop` dump that no real device has). The same applies to `ro.{system_dlkm,vendor_dlkm,odm_dlkm}.build.*`. **The whole marketing-name (`marketname`) family follows the same rule**: `ro.product.marketname`, its partition copies, and the OnePlus/OPPO alias `ro.vendor.oplus.market.name` are written only where they already exist (OEMs typically export just a few copies). **Exception**: keys written explicitly in `custom_props` are exempt and always written.
 :::
 
 ## Android Version Spoofing

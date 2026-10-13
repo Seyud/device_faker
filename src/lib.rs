@@ -10,7 +10,11 @@ mod file_logger;
 mod hooks;
 mod prop_backend;
 
-use std::{collections::HashMap, fs, path::Path};
+use std::{
+    collections::{HashMap, HashSet},
+    fs,
+    path::Path,
+};
 
 use anyhow::Context;
 use companion::{handle_companion_request, spoof_system_props_via_companion};
@@ -175,9 +179,13 @@ impl MyModule {
 
         // ② COW 属性伪造（per-process，覆盖 native 读取，零模块驻留）
         //    companion_resetprop = true 时跳过 COW，全部交给 companion resetprop（全局生效）
-        let prop_map = Config::build_merged_property_map(&merged);
+        let (prop_map, explicit_props) = Config::build_merged_property_map_with_explicit(&merged);
         if config.debug {
-            info!("Property map: {} entries", prop_map.len());
+            info!(
+                "Property map: {} entries ({} explicit custom_props)",
+                prop_map.len(),
+                explicit_props.len()
+            );
         }
 
         if merged.companion_resetprop {
@@ -187,6 +195,7 @@ impl MyModule {
                 if let Err(e) = spoof_system_props_via_companion(
                     api,
                     &prop_map,
+                    &explicit_props,
                     &delete_props,
                     &package_name,
                     merged.dpi,
@@ -206,7 +215,7 @@ impl MyModule {
             // 自动 fallback 会修改全局属性（getprop/其他 app 可见），破坏
             // COW 模式的 per-process 隔离承诺。需要全局生效（getprop 子进程
             // 可见、__DELETE__ 删除属性）时显式开启 companion_resetprop。
-            let unfound_props = match cow_props::apply_cow_spoof(&prop_map) {
+            let unfound_props = match cow_props::apply_cow_spoof(&prop_map, &explicit_props) {
                 Ok(unfound) => unfound,
                 Err(e) => {
                     error!("COW spoof failed: {e:?}");
@@ -234,9 +243,11 @@ impl MyModule {
             // 配置了仍走 companion。
             if merged.dpi.is_some() {
                 let empty: HashMap<String, String> = HashMap::new();
+                let no_explicit: HashSet<String> = HashSet::new();
                 if let Err(e) = spoof_system_props_via_companion(
                     api,
                     &empty,
+                    &no_explicit,
                     &[],
                     &package_name,
                     merged.dpi,

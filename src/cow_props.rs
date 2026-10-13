@@ -15,7 +15,10 @@
 //! - `ManuallyDrop` 防止 `MmapPropArea` drop → `MmapMut` drop → munmap（副本需保持存活）
 //! - `emplace()` 内部 bump allocator 分配 trie 节点 + prop_info，Release store 发布指针
 
-use std::{cell::RefCell, collections::HashMap};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+};
 
 use log::{info, warn};
 use prop_rs_android::mmap_prop_area::{MmapPropArea, PROP_INFO_LONG_FLAG};
@@ -87,10 +90,18 @@ fn sys_prop_find() -> Option<FnSystemPropertyFind> {
 ///
 /// - 已有属性：COW remap + 原地 patch
 /// - 不存在属性：在对应 prop_area 的 COW 映射中插入 trie 节点 + prop_info
+///   （例外：`config::is_patch_only_key` 认定的「本机可能不存在」的自动展开变体
+///   —— dlkm 分区副本、营销名族、OPPO 别名 —— 只做「已存在才补齐」，不存在时
+///   跳过不插入；`explicit` 里用户 `custom_props` 显式写出的 key 不受此门控）
 ///
-/// 返回仍未能处理的属性列表（映射找不到或空间不足），供 companion resetprop 兜底。
+/// `explicit`：`config::build_merged_property_map_with_explicit` 返回的显式 key 集合。
+///
+/// 返回本进程无法落地的属性列表（area 空间不足等）。**严格 COW 不再降级
+/// companion resetprop**：调用方只记录 WARN，需要全局生效时由用户显式开启
+/// `companion_resetprop`（见 src/lib.rs）。
 pub fn apply_cow_spoof(
     prop_map: &HashMap<String, String>,
+    explicit: &HashSet<String>,
 ) -> anyhow::Result<Vec<(String, String)>> {
     let mut unfound: Vec<(String, String)> = Vec::new();
 
@@ -155,6 +166,7 @@ pub fn apply_cow_spoof(
     let mut cow_patched = 0usize;
     let mut cow_inserted = 0usize;
     let mut cow_skipped = 0usize;
+    let mut cow_patch_only_skipped = 0usize;
 
     for (key, value) in &filtered {
         // Context 路由目标 area 未映射进本进程（预热后仍未映射 = SELinux
@@ -179,15 +191,33 @@ pub fn apply_cow_spoof(
         ) {
             Ok(true) => cow_patched += 1,
             Ok(false) => {
-                // 属性不存在 → 尝试在私有副本中插入新 trie 节点
-                match cow_patch_new(key, value, &mappings, backend.as_ref()) {
-                    Ok(true) => cow_inserted += 1,
-                    Ok(false) => {
-                        unfound.push((key.to_string(), value.to_string()));
-                    }
-                    Err(e) => {
-                        warn!("COW insert failed for '{key}': {e}");
-                        unfound.push((key.to_string(), value.to_string()));
+                // 「本机可能不存在」的 key（dlkm 分区副本、OEM 营销名族与别名）只在部分
+                // ROM 上导出，且这些 key 是模块为覆盖前缀路由**自动展开**出来的。本进程
+                // find() 不到 = 该 key 在此 ROM 上不存在（或本进程读不到）：此时 app 读到
+                // 真值与伪装值同为 unknown，插入零收益，却会在 __system_property_foreach /
+                // getprop 里留下真实设备没有的可枚举「幽灵属性」⇒ 只做「已存在才补齐」。
+                //
+                // 例外：用户在 custom_props 里显式写出的 key（`explicit`）是明确指令，
+                // 照写不误（例如在非 OPPO 机型上伪装 OPPO 别名）。
+                if crate::config::is_patch_only_key(key) && !explicit.contains(*key) {
+                    info!("COW skip '{key}': absent on this ROM (patch-only key)");
+                    cow_patch_only_skipped += 1;
+                } else {
+                    // 属性不存在 → 尝试在私有副本中插入新 trie 节点
+                    match cow_patch_new(key, value, &mappings, backend.as_ref()) {
+                        Ok(true) => {
+                            if explicit.contains(*key) {
+                                info!("COW insert '{key}' (explicit custom_prop)");
+                            }
+                            cow_inserted += 1;
+                        }
+                        Ok(false) => {
+                            unfound.push((key.to_string(), value.to_string()));
+                        }
+                        Err(e) => {
+                            warn!("COW insert failed for '{key}': {e}");
+                            unfound.push((key.to_string(), value.to_string()));
+                        }
                     }
                 }
             }
@@ -198,9 +228,9 @@ pub fn apply_cow_spoof(
     // 全部 patch 完成：副本降回只读，形态与正常共享只读属性区一致。
     seal_area_clones();
 
-    if cow_patched > 0 || cow_inserted > 0 {
+    if cow_patched > 0 || cow_inserted > 0 || cow_patch_only_skipped > 0 {
         info!(
-            "COW spoof: {cow_patched} patched, {cow_inserted} inserted, {cow_skipped} skipped (unobservable), {} total",
+            "COW spoof: {cow_patched} patched, {cow_inserted} inserted, {cow_skipped} skipped (unobservable), {cow_patch_only_skipped} skipped (absent on ROM), {} total",
             filtered.len()
         );
     }

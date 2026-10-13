@@ -11,8 +11,8 @@
 //! 3. `BpActivityManager::register_uid_observer(observer, which, cutpoint, pkg)`
 //!    ——事务码 2（IActivityManager native 侧稳定区段，占位 openContentUri
 //!    code=1 对齐真实顺序）；**cutpoint = -1（全量回调，用户态过滤）**——
-//!    曾试 cutpoint=PROCESS_STATE_TOP(2) 内核过滤，但 MIUI 实测非配置 app
-//!    首次进入 TOP 事件被过滤，前台门控失效；正确性优先保留全量回调；
+//!    内核侧 cutpoint 过滤在部分 OEM ROM 上会丢掉非配置 app 首次进入 TOP 的
+//!    事件，前台门控随之失效；正确性优先，保留全量回调；
 //! 4. `ProcessState::start_thread_pool()` 接收回调；
 //! 5. uid → 包名 用 `/data/system/packages.list`（root 可读）全量映射。
 //!
@@ -189,9 +189,8 @@ fn register_observer(sink: FgSink) -> anyhow::Result<()> {
     bp.r#registerUidObserver(
         &observer,
         UID_OBSERVER_PROCSTATE | UID_OBSERVER_GONE,
-        // 必须用 -1（全量回调，用户态过滤）：曾试 cutpoint=PROCESS_STATE_TOP(2)
-        // 期望内核侧过滤后台噪声，但实测（evergo Android16/MIUI）非配置 app
-        // 首次进入 TOP 的事件被过滤，导致前台门控不恢复 density/props。
+        // 必须用 -1（全量回调，用户态过滤）：内核侧 cutpoint 过滤在部分 OEM ROM 上
+        // 会丢掉非配置 app 首次进入 TOP 的事件，导致前台门控不恢复 density/props。
         // 正确性优先：全量回调 + on_top_change 的 proc_state==TOP 判断。
         -1,
         "device_faker",

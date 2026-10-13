@@ -119,7 +119,11 @@ The following fields can be used in templates or `[[apps]]`. Each field drives b
 | `build_id` | `Build.ID` | `ro.build.id`, `ro.system.build.id`, `ro.vendor.build.id`, `ro.product.build.id` | Build ID (e.g. UKQ1.230917.001) |
 | `characteristics` | — (properties only) | `ro.build.characteristics` | Characteristics (e.g. tablet) |
 
-> **"Partition variants"** means the 6 properties `ro.product.{odm,vendor,system,system_ext,product,bootimage}.<field>`. Bionic property reads route by prefix to partition-specific property areas — OnePlus/OPPO and other devices read these variants, so writing them all keeps reads consistent across devices.
+> **"Partition variants"** means `ro.product.{odm,vendor,system,system_ext,product,bootimage,system_dlkm,vendor_dlkm,odm_dlkm}.<field>`. Bionic property reads route by prefix to partition-specific property areas — OnePlus/OPPO and other devices read these variants, so writing them all keeps reads consistent across devices.
+>
+> **`system_dlkm` / `vendor_dlkm` / `odm_dlkm` are "fill only if already present"**: these dynamic kernel module partitions only export these copies on some Android 13+ ROMs (some Android 13+ ROMs export all of them, older devices may have none). Keys that do not exist on the device are not written — otherwise they would show up as enumerable "ghost properties" in a full `getprop` dump / `__system_property_foreach` that no real device has, while spoofing a property the app cannot read buys nothing. The same applies to the build family `ro.{system_dlkm,vendor_dlkm,odm_dlkm}.build.*`.
+>
+> **The whole marketing-name (`marketname`) family is "fill only if already present" too**: `ro.product.marketname`, its partition copies, and the OnePlus/OPPO alias `ro.vendor.oplus.market.name` are only written when they already exist on the device. OEMs usually export only the base key plus a few partition copies (odm/vendor and the like); the remaining copies — including `ro.vendor.oplus.market.name` on non-OPPO devices — do not exist, so unconditional writes would add properties no real device has to the full `getprop` dump. Both the COW and companion paths check existence before writing (the companion queries the in-process property area, adding no process overhead). **Exception**: keys written **explicitly** in `custom_props` are exempt — that is the user asking for that exact property (e.g. spoofing OPPO's `ro.vendor.oplus.market.name` on a non-OPPO device), so it is always written; the rule only applies to partition/family variants the module expands **automatically**.
 
 ### Android Version and Build Info Spoofing
 
@@ -132,6 +136,8 @@ The following fields can be used in templates or `[[apps]]`. Each field drives b
 | `security_patch` | `Build.VERSION.SECURITY_PATCH` | `ro.build.version.security_patch` + partition variants | `2025-06-05` |
 
 > `security_patch` writes the whole family `ro.{system,system_ext,product,vendor,odm,bootimage,system_dlkm,vendor_dlkm,odm_dlkm}.build.version.security_patch` plus the bare vendor copy `ro.vendor.build.security_patch` (the Vendor security patch level).
+>
+> `sdk_int` is numeric but also accepts the string marker `sdk_int = "__DELETE__"` to delete the whole `ro.build.version.sdk` family (high risk; the WebUI form only accepts integers, edit the TOML by hand).
 
 ### Per-app DPI
 
@@ -159,9 +165,13 @@ manufacturer = "Custom"
 | Normal string | Set to that value |
 | `""` | Set to an empty string (equivalent to `__EMPTY__`) |
 | `"__EMPTY__"` | Set to an empty string |
-| `"__DELETE__"` | Delete the property (via companion resetprop) |
+| `"__DELETE__"` | Delete the property (for structured fields: the whole property family; **only actually applied when `companion_resetprop = true`**) |
 
-> ⚠️ **Marker values behave differently in structured fields (e.g. `brand`, `model`)**: `__DELETE__` triggers deletion of the corresponding property, but the literal `__DELETE__` string is also written into the property and the Build field; `__EMPTY__` is written literally as-is. **Use marker values only in `custom_props`**; for structured fields, leaving the value empty (`""` or omitted) means "leave unchanged".
+> **Structured fields** (`brand`, `manufacturer`, `model`, `name`, `device`, `marketname`, `fingerprint`, `build_id`, `incremental`, `security_patch`, `display_id`, `characteristics`, `hardware`, `board`, `soc_model`, `android_version`, `sdk_int`) with `__DELETE__`: the whole property family of that field goes on the delete list (e.g. `brand` → `ro.product.brand` + 9 partition copies), and the value is **no longer written to the properties or hooked into the Build field**; `__EMPTY__` writes an empty string to both. A few fields also delete OEM aliases: `marketname` → `ro.vendor.oplus.market.name`, `product`/`name` → `ro.build.product`, `security_patch` → `ro.vendor.build.security_patch`.
+>
+> `sdk_int` uses `sdk_int = "__DELETE__"` (a string marker on a numeric field; the WebUI form only accepts integers, so edit the TOML by hand) and deletes the whole `ro.build.version.sdk` family — **SDK_INT is derived from that property, so reads fail afterwards; high risk**.
+>
+> ⚠️ **Deletion only affects global properties, and only runs with `companion_resetprop = true`**: the default strict COW mode never writes the global property area, so the delete list is skipped with a per-key WARN (`__DELETE__` conflicts with per-process isolation). `__EMPTY__` still works under COW (it writes into the in-process private copy).
 
 ### Feature Switches
 

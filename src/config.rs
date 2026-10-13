@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use anyhow::Result;
 use indexmap::IndexMap;
@@ -13,6 +13,11 @@ fn valid_dpi(value: Option<u32>) -> Option<u32> {
 
 /// `ro.product.*` 会按属性来源顺序读取不同分区的副本。模板字段必须同步这些副本，
 /// 否则检测程序可以从另一个分区读回真机值。
+///
+/// `ro.product.<分区>.<字段>` 需要覆盖 9 个分区：system / system_ext / product / vendor /
+/// odm / bootimage / system_dlkm / vendor_dlkm / odm_dlkm。前 6 个是 AOSP 长期导出的；
+/// 后 3 个动态内核模块分区只在 Android 13+ 的部分 ROM 上导出，因此它们走
+/// [`is_patch_only_key`] 的「已存在才补齐」语义，避免在不支持的 ROM 上造出幽灵属性。
 const PRODUCT_PARTITION_PREFIXES: &[&str] = &[
     "odm",
     "vendor",
@@ -20,7 +25,47 @@ const PRODUCT_PARTITION_PREFIXES: &[&str] = &[
     "system_ext",
     "product",
     "bootimage",
+    "system_dlkm",
+    "vendor_dlkm",
+    "odm_dlkm",
 ];
+
+/// 只在部分 ROM 上存在的动态内核模块分区（system_dlkm / vendor_dlkm / odm_dlkm）。
+const PATCH_ONLY_PARTITIONS: &[&str] = &["system_dlkm", "vendor_dlkm", "odm_dlkm"];
+
+/// OEM 营销名别名：`ro.vendor.oplus.market.name` 只在 OnePlus/OPPO 上存在。
+const OEM_MARKETNAME_ALIASES: &[&str] = &["ro.vendor.oplus.market.name"];
+
+/// 该属性是否属于「本机可能不存在」的 key，即只允许 **已存在才补齐**。
+///
+/// 覆盖三类：
+/// 1. 动态内核模块分区副本：`ro.product.{system_dlkm,vendor_dlkm,odm_dlkm}.<字段>`
+///    与 `ro.{...}.build.<字段>`（Android 13+ 部分 ROM 才有）；
+/// 2. OEM 营销名族 `ro.product[.<分区>].marketname`：OEM 通常只导出 base 与少数几个
+///    分区副本，其余分区副本在多数 ROM 上并不存在；
+/// 3. OEM 营销名别名（[`OEM_MARKETNAME_ALIASES`]）。
+///
+/// 设备上不存在的 key 若被写入，会在 `__system_property_foreach` / `getprop` 里
+/// 留下真实设备没有的可枚举「幽灵属性」（设备信息类检测可据此发现伪装），而对 app
+/// 来说真值与伪装值同样是 unknown —— 写入零收益、纯增指纹，故一律跳过不写。
+pub fn is_patch_only_key(key: &str) -> bool {
+    if OEM_MARKETNAME_ALIASES.contains(&key) {
+        return true;
+    }
+
+    // 营销名族：`ro.product.marketname` 与 `ro.product.<分区>.marketname`
+    if key.starts_with("ro.product.") && key.ends_with(".marketname") {
+        return true;
+    }
+
+    let rest = key
+        .strip_prefix("ro.product.")
+        .or_else(|| key.strip_prefix("ro."));
+    rest.is_some_and(|rest| {
+        rest.split_once('.')
+            .is_some_and(|(partition, _)| PATCH_ONLY_PARTITIONS.contains(&partition))
+    })
+}
 
 /// 新版 Android 还为动态内核模块分区导出独立构建信息。
 const BUILD_PARTITION_PREFIXES: &[&str] = &[
@@ -103,6 +148,72 @@ impl FingerprintParts {
     }
 }
 
+/// 数值型伪装字段（目前只有 `sdk_int`）的设置值。
+///
+/// 数值字段无法用类型本身表达字符串标记，因此单独建模：
+/// - `sdk_int = 35` → [`NumberSetting::Value`]
+/// - `sdk_int = "__DELETE__"` → [`NumberSetting::Delete`]（与字符串字段的
+///   `__DELETE__` 语义一致，删除 `ro.build.version.sdk` 整族；SDK_INT 由系统属性
+///   派生，删除后相关读取会失败，属高风险操作，仅供明确需要的用户使用）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NumberSetting {
+    Value(u32),
+    Delete,
+}
+
+impl NumberSetting {
+    /// 需要写入的伪装值；`__DELETE__` 返回 None（走删除列表）。
+    pub fn value(self) -> Option<u32> {
+        match self {
+            Self::Value(value) => Some(value),
+            Self::Delete => None,
+        }
+    }
+
+    pub fn is_delete(self) -> bool {
+        matches!(self, Self::Delete)
+    }
+}
+
+impl<'de> Deserialize<'de> for NumberSetting {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct SettingVisitor;
+
+        impl serde::de::Visitor<'_> for SettingVisitor {
+            type Value = NumberSetting;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("整数伪装值或 \"__DELETE__\"")
+            }
+
+            fn visit_i64<E: serde::de::Error>(self, value: i64) -> Result<Self::Value, E> {
+                u32::try_from(value)
+                    .map(NumberSetting::Value)
+                    .map_err(|_| E::invalid_value(serde::de::Unexpected::Signed(value), &self))
+            }
+
+            fn visit_u64<E: serde::de::Error>(self, value: u64) -> Result<Self::Value, E> {
+                u32::try_from(value)
+                    .map(NumberSetting::Value)
+                    .map_err(|_| E::invalid_value(serde::de::Unexpected::Unsigned(value), &self))
+            }
+
+            fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<Self::Value, E> {
+                if value == "__DELETE__" {
+                    Ok(NumberSetting::Delete)
+                } else {
+                    Err(E::invalid_value(serde::de::Unexpected::Str(value), &self))
+                }
+            }
+        }
+
+        deserializer.deserialize_any(SettingVisitor)
+    }
+}
+
 fn has_profile_value(value: &Option<String>) -> bool {
     value.as_ref().is_some_and(|value| !value.is_empty())
 }
@@ -129,6 +240,12 @@ fn field_value(field: &Option<String>) -> Option<String> {
 }
 
 /// 为 `ro.product.<suffix>` 写入全部分区副本（bionic prefix routing 可能读取任一副本）。
+///
+/// 写入侧的「本机不存在就不写」由 [`is_patch_only_key`] 统一门控（COW 与 companion
+/// 两条路径各自做存在性判断），涵盖：
+/// - `system_dlkm` / `vendor_dlkm` / `odm_dlkm` 三个 dlkm 分区副本（只在部分 ROM 上存在）；
+/// - `suffix == "marketname"` 的整族——OEM 营销名通常只有 base 与 odm/vendor 等少数副本，
+///   其余分区副本在多数 ROM 上并不存在。
 fn insert_product_family(map: &mut HashMap<String, String>, suffix: &str, value: &str) {
     map.insert(format!("ro.product.{suffix}"), value.to_string());
     for partition in PRODUCT_PARTITION_PREFIXES {
@@ -139,7 +256,8 @@ fn insert_product_family(map: &mut HashMap<String, String>, suffix: &str, value:
     }
 }
 
-/// 为 `ro.build.<suffix>` 写入全部分区副本（含动态内核模块分区）。
+/// 为 `ro.build.<suffix>` 写入全部分区副本（含动态内核模块分区；dlkm 分区同样按
+/// 「已存在才补齐」处理，见 [`is_patch_only_key`]）。
 fn insert_build_family(map: &mut HashMap<String, String>, suffix: &str, value: &str) {
     map.insert(format!("ro.build.{suffix}"), value.to_string());
     for partition in BUILD_PARTITION_PREFIXES {
@@ -228,9 +346,9 @@ pub struct DeviceTemplate {
     /// Android 版本伪装（如 "15", "14"）
     #[serde(default)]
     pub android_version: Option<String>,
-    /// SDK 版本伪装（如 35, 34）
+    /// SDK 版本伪装（如 35, 34）；`"__DELETE__"` 删除 `ro.build.version.sdk` 整族
     #[serde(default)]
-    pub sdk_int: Option<u32>,
+    pub sdk_int: Option<NumberSetting>,
     /// 临时覆盖系统显示密度（120–640），由 companion 使用 `wm density` 应用
     #[serde(default)]
     pub dpi: Option<u32>,
@@ -292,9 +410,9 @@ pub struct AppConfig {
     /// Android 版本伪装（如 "15", "14"）
     #[serde(default)]
     pub android_version: Option<String>,
-    /// SDK 版本伪装（如 35, 34）
+    /// SDK 版本伪装（如 35, 34）；`"__DELETE__"` 删除 `ro.build.version.sdk` 整族
     #[serde(default)]
-    pub sdk_int: Option<u32>,
+    pub sdk_int: Option<NumberSetting>,
     /// 临时覆盖系统显示密度（120–640），由 companion 使用 `wm density` 应用
     #[serde(default)]
     pub dpi: Option<u32>,
@@ -403,6 +521,7 @@ impl Config {
                     .clone()
                     .unwrap_or_else(|| self.default_hide_maps.clone()),
                 companion_resetprop: app.companion_resetprop.unwrap_or(false),
+                derived_props: HashSet::new(),
             };
             merged.complete_device_profile();
             return Some(merged);
@@ -439,6 +558,7 @@ impl Config {
                     .clone()
                     .unwrap_or_else(|| self.default_hide_maps.clone()),
                 companion_resetprop: template.companion_resetprop.unwrap_or(false),
+                derived_props: HashSet::new(),
             };
             merged.complete_device_profile();
             return Some(merged);
@@ -450,8 +570,21 @@ impl Config {
     /// 构建合并配置的系统属性映射
     /// 空字符串会被忽略，不会添加到映射中
     /// __DELETE__ 标记的属性会被记录到 delete_props 中
-    pub fn build_merged_property_map(merged: &MergedAppConfig) -> HashMap<String, String> {
+    /// 构建属性表，同时返回 `custom_props` 里**逐字显式写出**的 key 集合。
+    ///
+    /// 显式 key 不受 [`is_patch_only_key`] 的「本机不存在就不写」门控：用户在
+    /// `custom_props` 里指名道姓写 `"ro.vendor.oplus.market.name" = "…"`（例如在非 OPPO
+    /// 机型上伪装成 OPPO）就是要求写入该 key，写不写由用户决定。门控只针对**自动展开**出来的
+    /// 分区/属性族变体——那是模块为覆盖 bionic 前缀路由而自作主张补的副本，真机上不存在
+    /// 时会变成可枚举的幽灵属性。
+    ///
+    /// 注意：`custom_props."ro.product.marketname"` 这类**族头**只把该族头本身算作显式，
+    /// 它展开出的分区副本仍走门控。
+    pub fn build_merged_property_map_with_explicit(
+        merged: &MergedAppConfig,
+    ) -> (HashMap<String, String>, HashSet<String>) {
         let mut map = HashMap::new();
+        let mut explicit: HashSet<String> = HashSet::new();
 
         // 分区副本同步：bionic prefix routing 可能从任一分区的 prop_area 读取，
         // 检测程序也可以直接指定分区变体读回真机值，必须整族写入。
@@ -462,6 +595,8 @@ impl Config {
             insert_product_family(&mut map, "brand", &brand);
         }
         if let Some(marketname) = field_value(&merged.marketname) {
+            // 营销名只「已存在才补齐」（见 [`is_patch_only_key`]）：真机上没有的营销名副本
+            // （含下列 OPPO 别名在不支持该 prop 的 ROM 上）一律不写，避免造出可枚举幽灵属性。
             insert_product_family(&mut map, "marketname", &marketname);
             // OnePlus/OPPO 设备读 ro.vendor.oplus.market.name 而非 ro.product.marketname
             map.insert(
@@ -538,9 +673,8 @@ impl Config {
             insert_build_family(&mut map, "version.release", &android_version);
         }
 
-        if let Some(sdk_int) = merged.sdk_int {
-            let sdk_str = sdk_int.to_string();
-            insert_build_family(&mut map, "version.sdk", &sdk_str);
+        if let Some(sdk_int) = merged.sdk_int.and_then(NumberSetting::value) {
+            insert_build_family(&mut map, "version.sdk", &sdk_int.to_string());
         }
 
         // 自定义属性：已知属性族先整族展开，精确 key 随后覆盖（优先级最高）
@@ -551,6 +685,12 @@ impl Config {
                 }
                 let final_value = if value == "__EMPTY__" { "" } else { value };
                 expand_known_custom_property(&mut map, key, final_value);
+                // 用户显式写出的 key 本身（不含上面展开出的分区副本）不受
+                // `is_patch_only_key` 门控，见函数文档；模块自行注入的派生键
+                // （derived_props）不算显式。
+                if !merged.derived_props.contains(key) {
+                    explicit.insert(key.clone());
+                }
             }
             for (key, value) in custom_props {
                 if value == "__DELETE__" {
@@ -561,7 +701,7 @@ impl Config {
             }
         }
 
-        map
+        (map, explicit)
     }
 
     /// 构建需要删除的属性列表（用于 companion 模式）。
@@ -643,6 +783,19 @@ impl Config {
         if merged.board.as_ref().is_some_and(|s| s == "__DELETE__") {
             delete_props.push("ro.product.board".to_string());
         }
+        if merged.soc_model.as_ref().is_some_and(|s| s == "__DELETE__") {
+            delete_props.push("ro.soc.model".to_string());
+        }
+        if merged
+            .android_version
+            .as_ref()
+            .is_some_and(|s| s == "__DELETE__")
+        {
+            delete_build_family(&mut delete_props, "version.release");
+        }
+        if merged.sdk_int.is_some_and(NumberSetting::is_delete) {
+            delete_build_family(&mut delete_props, "version.sdk");
+        }
 
         if let Some(custom_props) = &merged.custom_props {
             for (key, value) in custom_props {
@@ -679,7 +832,7 @@ pub struct MergedAppConfig {
     pub security_patch: Option<String>,
     pub characteristics: Option<String>,
     pub android_version: Option<String>,
-    pub sdk_int: Option<u32>,
+    pub sdk_int: Option<NumberSetting>,
     /// 最终显示密度覆盖值，超出 120–640 的配置会被忽略
     pub dpi: Option<u32>,
     pub custom_props: Option<HashMap<String, String>>,
@@ -688,6 +841,11 @@ pub struct MergedAppConfig {
     pub hide_maps: Vec<String>,
     /// 是否跳过 COW，所有属性走 companion resetprop（默认 false）
     pub companion_resetprop: bool,
+    /// 模块**自行注入** `custom_props` 的派生键（目前只有指纹解析出的
+    /// `ro.build.type` / `ro.build.tags`，见 `complete_device_profile`）。
+    /// 这些键不算「用户显式写出」，因此**不享受** patch-only 门控豁免
+    /// （见 `build_merged_property_map_with_explicit` 的 `explicit` 集合）。
+    pub derived_props: HashSet<String>,
 }
 
 impl MergedAppConfig {
@@ -734,12 +892,17 @@ impl MergedAppConfig {
 
         if let Some(parts) = parsed {
             let props = self.custom_props.get_or_insert_with(HashMap::new);
-            props
-                .entry("ro.build.type".to_string())
-                .or_insert(parts.build_type);
-            props
-                .entry("ro.build.tags".to_string())
-                .or_insert(parts.tags);
+            // 指纹派生键：用户没显式写时才注入，并登记为「派生」（不受 patch-only
+            // 门控豁免，理由见 MergedAppConfig::derived_props）。
+            for (key, value) in [
+                ("ro.build.type", parts.build_type),
+                ("ro.build.tags", parts.tags),
+            ] {
+                if !props.contains_key(key) {
+                    props.insert(key.to_string(), value);
+                    self.derived_props.insert(key.to_string());
+                }
+            }
         }
     }
 }

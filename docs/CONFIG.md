@@ -119,7 +119,11 @@ manufacturer = "Samsung"
 | `build_id` | `Build.ID` | `ro.build.id`、`ro.system.build.id`、`ro.vendor.build.id`、`ro.product.build.id` | Build ID (如: UKQ1.230917.001) |
 | `characteristics` | —（仅属性） | `ro.build.characteristics` | 特性 (如: tablet) |
 
-> **「分区变体」**指 `ro.product.{odm,vendor,system,system_ext,product,bootimage}.<字段>` 共 6 个属性。bionic 的属性读取按前缀路由到不同分区属性区，OnePlus/OPPO 等设备会读取这些变体，统一写入可保证各设备读取一致。
+> **「分区变体」**指 `ro.product.{odm,vendor,system,system_ext,product,bootimage,system_dlkm,vendor_dlkm,odm_dlkm}.<字段>`。bionic 的属性读取按前缀路由到不同分区属性区，OnePlus/OPPO 等设备会读取这些变体，统一写入可保证各设备读取一致。
+>
+> 其中 **`system_dlkm` / `vendor_dlkm` / `odm_dlkm` 走「已存在才补齐」**：这三个动态内核模块分区只在 Android 13+ 的部分 ROM 上导出这些副本（Android 13+ 的部分 ROM 才有这些分区副本，旧设备可能一个都没有）。设备上不存在的 key 不会被写入——否则会在 `getprop` 全量输出与 `__system_property_foreach` 里留下真机没有的可枚举「幽灵属性」，而 app 对本就读不到的属性做伪装也没有收益。构建属性族 `ro.{system_dlkm,vendor_dlkm,odm_dlkm}.build.*` 同理。
+>
+> **营销名（`marketname`）整族同样走「已存在才补齐」**：`ro.product.marketname` 及其分区副本、以及 OnePlus/OPPO 别名 `ro.vendor.oplus.market.name`，只有在真机上已存在时才会被写入。OEM 营销名通常只导出 base 与 odm/vendor 等少数几个分区副本，其余副本（含非 OPPO 机型上的 `ro.vendor.oplus.market.name`）并不存在，无条件写入会在 `getprop` 全量输出里凭空多出真机没有的属性。COW 与 companion 两条路径都在写入前做存在性判断（companion 用进程内属性区查询，无额外进程开销）。**例外**：`custom_props` 里**显式写出**的 key 不受该规则限制——那是用户指名要求写入的属性（例如在非 OPPO 机型上伪装 OPPO 的 `ro.vendor.oplus.market.name`），照写不误；门控只作用于模块**自动展开**出来的分区/属性族变体。
 
 ### Android 版本与构建信息伪装
 
@@ -132,6 +136,8 @@ manufacturer = "Samsung"
 | `security_patch` | `Build.VERSION.SECURITY_PATCH` | `ro.build.version.security_patch` 及分区变体 | `2025-06-05` |
 
 > `security_patch` 会按 `ro.{system,system_ext,product,vendor,odm,bootimage,system_dlkm,vendor_dlkm,odm_dlkm}.build.version.security_patch` 整族写入，另写入裸名副本 `ro.vendor.build.security_patch`（即「供应商安全补丁级别」）。
+>
+> `sdk_int` 是数值字段，但同样支持字符串标记 `sdk_int = "__DELETE__"`，用于删除 `ro.build.version.sdk` 整族（高风险操作；WebUI 表单不提供该写法，需手改 TOML）。
 
 ### DPI伪装
 
@@ -159,9 +165,13 @@ manufacturer = "Custom"
 | 普通字符串 | 设置为该值 |
 | `""` | 设置为空字符串（等价于 `__EMPTY__`） |
 | `"__EMPTY__"` | 设置为空字符串 |
-| `"__DELETE__"` | 删除该属性（经 companion resetprop） |
+| `"__DELETE__"` | 删除该属性（结构化字段则删除对应属性族；**仅在 `companion_resetprop = true` 时真正执行**） |
 
-> ⚠️ **结构化字段（如 `brand`、`model`）中的标记值行为不同**：`__DELETE__` 会触发对应属性删除，但字面量 `__DELETE__` 仍会同时写入属性和 Build 字段；`__EMPTY__` 则完全按字面值写入。**建议只在 `custom_props` 中使用标记值**；结构化字段留空（`""` 或省略）即为不修改。
+> **结构化字段**（`brand`、`manufacturer`、`model`、`name`、`device`、`marketname`、`fingerprint`、`build_id`、`incremental`、`security_patch`、`display_id`、`characteristics`、`hardware`、`board`、`soc_model`、`android_version`、`sdk_int`）写 `__DELETE__` 时：该字段对应的**属性族**全部进入删除列表（如 `brand` → `ro.product.brand` + 9 个分区副本），同时**不再写入属性、也不再 hook 对应 Build 字段**；`__EMPTY__` 则按空字符串写入（属性与 Build 字段都会写成空串）。少数字段额外删除 OEM 别名：`marketname` → `ro.vendor.oplus.market.name`，`product`/`name` → `ro.build.product`，`security_patch` → `ro.vendor.build.security_patch`。
+>
+> `sdk_int` 的 `__DELETE__` 写作 `sdk_int = "__DELETE__"`（数值字段的字符串标记，WebUI 表单只接受整数，需手改 TOML），删除 `ro.build.version.sdk` 整族——**SDK_INT 由该属性派生，删除后相关读取会失败，属高风险操作**。
+>
+> ⚠️ **删除只作用于全局属性，且只在 `companion_resetprop = true` 时生效**：默认的严格 COW 模式不写全局属性区，删除列表会被跳过并逐条打 WARN（`__DELETE__` 与 per-process 隔离天然冲突）。`__EMPTY__` 在 COW 模式可以正常生效（写进程内私有副本）。
 
 ### 功能开关
 

@@ -20,7 +20,9 @@
 | `characteristics` | —（仅属性） | `ro.build.characteristics` | 特性 (如: tablet) |
 
 ::: info 什么是「分区变体」？
-指 `ro.product.{odm,vendor,system,system_ext,product,bootimage}.<字段>` 共 6 个属性。bionic 的属性读取按前缀路由到不同分区属性区，OnePlus/OPPO 等设备会读取这些变体，统一写入可保证各设备读取一致。
+指 `ro.product.{odm,vendor,system,system_ext,product,bootimage,system_dlkm,vendor_dlkm,odm_dlkm}.<字段>`。bionic 的属性读取按前缀路由到不同分区属性区，OnePlus/OPPO 等设备会读取这些变体，统一写入可保证各设备读取一致。
+
+其中 `system_dlkm` / `vendor_dlkm` / `odm_dlkm` 走**「已存在才补齐」**：这三个动态内核模块分区只在 Android 13+ 的部分 ROM 上导出这些副本，设备上不存在的 key 不会被写入（否则会在 `getprop` 全量输出里留下真机没有的可枚举「幽灵属性」）。`ro.{system_dlkm,vendor_dlkm,odm_dlkm}.build.*` 同理。**营销名（`marketname`）整族也走同一规则**：`ro.product.marketname` 及其分区副本、以及 OnePlus/OPPO 别名 `ro.vendor.oplus.market.name`，只有真机上已存在的才会被写入（OEM 通常只导出少数几个副本）。**例外**：`custom_props` 里显式写出的 key 不受此限制，按你的要求照写。
 :::
 
 ## Android 版本伪装

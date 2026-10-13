@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs::{self, OpenOptions},
     io::{Read, Write},
     os::unix::net::UnixStream,
@@ -44,6 +44,11 @@ struct SessionSpec {
 
 struct Originals {
     prop_backups: HashMap<String, String>,
+    /// 备份时**真机上不存在**的 key（`prop_backups` 里只是空串占位）。restore 时
+    /// 必须 `delete` 而不是 `set ""`——否则会把"本来没有的属性"写成**空值属性**：
+    /// key 存在但值为空，`getprop` 读出来同样是空串，与"不存在"难以区分，在
+    /// `__system_property_foreach` / 全量 dump 里就是真机没有的可枚举幽灵属性。
+    absent_props: HashSet<String>,
     orig_density: Option<u32>,
 }
 
@@ -160,7 +165,8 @@ fn activate_session(sess: &mut Session) {
 }
 
 fn deactivate_session(sess: &mut Session, focused: &str) {
-    if let Err(e) = restore_props_batch(&sess.originals.prop_backups) {
+    if let Err(e) = restore_props_batch(&sess.originals.prop_backups, &sess.originals.absent_props)
+    {
         error!(
             "FG handoff: prop restore failed for '{}': {e}",
             sess.package
@@ -191,6 +197,7 @@ pub struct WriteLogRequest {
 pub fn spoof_system_props_via_companion(
     api: &mut ZygiskApi<V4>,
     prop_map: &HashMap<String, String>,
+    explicit_props: &HashSet<String>,
     delete_props: &[String],
     package_name: &str,
     density: Option<u32>,
@@ -203,6 +210,7 @@ pub fn spoof_system_props_via_companion(
     let request = CompanionRequest::Apply(ResetpropSessionRequest {
         pid: std::process::id(),
         props: prop_map.clone(),
+        explicit_props: explicit_props.iter().cloned().collect(),
         delete_props: delete_props.to_vec(),
         package_name: package_name.to_string(),
         density,
@@ -368,7 +376,7 @@ pub(crate) fn sync_log_level(debug: bool) {
 /// Apply 请求处理器：只采样备份 + 登记未激活会话（D1），
 /// 不急切应用任何全局态；激活由 FG 事件驱动。
 fn apply_resetprop_session(
-    request: ResetpropSessionRequest,
+    mut request: ResetpropSessionRequest,
 ) -> anyhow::Result<HashMap<String, String>> {
     sync_log_level(request.debug);
 
@@ -385,6 +393,44 @@ fn apply_resetprop_session(
             DPI_MIN,
             DPI_MAX
         );
+    }
+
+    // 「本机可能不存在」的 key（ro.product.{dlkm 分区}.* / ro.{dlkm 分区}.build.*、
+    // OEM 营销名族 `ro.product[.<分区>].marketname` 与别名 `ro.vendor.oplus.market.name`）
+    // 只在部分 ROM 上存在，且都是模块**自动展开**出来的副本。resetprop `set()` 会在设备上
+    // 不存在的 key 上创建**全局**幽灵属性（shell `getprop` 全量 dump 可见，比进程内副本
+    // 显眼得多），且 backup/restore 还会把它留成空值 ⇒ 登记前先剔除真机不存在的 key
+    // （连带不进 originals 备份，restore 也就不会重建它）。
+    //
+    // 例外：`custom_props` 里用户显式写出的 key（`explicit_props`）是明确指令，照写不误。
+    //
+    // 存在性用 `sys_prop::find`（bionic `__system_property_find`，本进程直接查属性区，
+    // 首次查询触发该 context area 的惰性映射）——**不 fork/exec `getprop`**。判定不了
+    // （bionic 符号加载失败）时保守放行，保持旧行为。
+    if request
+        .props
+        .keys()
+        .any(|key| crate::config::is_patch_only_key(key))
+    {
+        let explicit: HashSet<&str> = request.explicit_props.iter().map(String::as_str).collect();
+        let mut dropped_keys: Vec<String> = Vec::new();
+        request.props.retain(|key, _| {
+            let keep = !crate::config::is_patch_only_key(key)
+                || explicit.contains(key.as_str())
+                || property_exists(key) != Some(false);
+            if !keep {
+                dropped_keys.push(key.clone());
+            }
+            keep
+        });
+        if !dropped_keys.is_empty() {
+            info!(
+                "Apply for '{}': dropped {} keys absent on this ROM: {}",
+                request.package_name,
+                dropped_keys.len(),
+                dropped_keys.join(", ")
+            );
+        }
     }
 
     // 首次 Apply 时惰性启动前台源（UidObserver 事件驱动；失败退 0.5s 轮询）。
@@ -439,10 +485,17 @@ fn apply_resetprop_session(
         }
     }
 
-    // 采样原始值（此刻全局干净）。
+    // 采样原始值（此刻全局干净）。真机上不存在的 key 记入 `absent_props`，
+    // restore 时走 delete（set 空串会造出"空值属性"这种幽灵 key）。
     let mut prop_backups = HashMap::new();
+    let mut absent_props = HashSet::new();
     for key in request.props.keys().chain(request.delete_props.iter()) {
-        prop_backups.insert(key.clone(), backup_property(key)?);
+        if property_exists(key) == Some(false) {
+            absent_props.insert(key.clone());
+            prop_backups.insert(key.clone(), String::new());
+        } else {
+            prop_backups.insert(key.clone(), backup_property(key)?);
+        }
     }
     let orig_density = if request.density.is_some() {
         query_density_override()?
@@ -453,13 +506,14 @@ fn apply_resetprop_session(
     let backups_for_response = prop_backups.clone();
 
     info!(
-        "Apply registered session for '{}' (pid {}, density={:?}, orig_density={:?}, {} props, {} deletes)",
+        "Apply registered session for '{}' (pid {}, density={:?}, orig_density={:?}, {} props, {} deletes, {} absent on this ROM)",
         request.package_name,
         request.pid,
         request.density,
         orig_density,
         prop_backups.len(),
-        request.delete_props.len()
+        request.delete_props.len(),
+        absent_props.len()
     );
 
     *guard = Some(Session {
@@ -472,6 +526,7 @@ fn apply_resetprop_session(
         },
         originals: Originals {
             prop_backups,
+            absent_props,
             orig_density,
         },
         activated: false,
@@ -504,7 +559,31 @@ fn restore_properties(request: RestoreRequest) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// 属性在真机是否存在。返回 `None` = 无法判定（bionic 符号加载失败），调用方保守放行。
+///
+/// 走 `sys_prop::find`（本进程直接查属性区）——**不 fork/exec `getprop`**。
+fn property_exists(key: &str) -> Option<bool> {
+    sys_prop::init().ok()?;
+    Some(sys_prop::find(key).is_some())
+}
+
+/// 读属性当前值（`None` = 本进程读不到：不存在，或该 area 未映射/无可读权限）。
+fn property_value(key: &str) -> Option<String> {
+    sys_prop::init().ok()?;
+    sys_prop::get(key)
+}
+
+/// 备份单个属性的当前全局值。
+///
+/// 快路径：`sys_prop::get` 在本进程直接读属性区（已存在的属性**零 fork**）。
+/// 回落：读不到时用 `getprop` 子进程取真值（root 视角，能覆盖"属性存在但本进程
+/// 读不到该 area"的情形），保持与旧实现完全一致的备份语义（不存在 → 空串）。
+/// 因此每次 Apply 的 `getprop` 子进程数量从「属性数」降到「不存在的属性数」。
 fn backup_property(key: &str) -> anyhow::Result<String> {
+    if let Some(value) = property_value(key) {
+        return Ok(value);
+    }
+
     let output = std::process::Command::new("getprop").arg(key).output()?;
     if !output.status.success() {
         anyhow::bail!("getprop failed for {key}");
@@ -582,9 +661,20 @@ fn apply_props_batch(
     Ok(())
 }
 
-fn restore_props_batch(backups: &HashMap<String, String>) -> anyhow::Result<()> {
+fn restore_props_batch(
+    backups: &HashMap<String, String>,
+    absent_props: &HashSet<String>,
+) -> anyhow::Result<()> {
     for (key, value) in backups {
-        apply_resetprop(key, value)?;
+        if absent_props.contains(key) {
+            // 备份时该 key 不存在 ⇒ 恢复"不存在"，而不是写成空值属性。
+            // delete 一个本就不存在的 key 是幂等空操作，失败也不影响其它 key。
+            if let Err(e) = resetprop_delete(key) {
+                warn!("restore: delete of originally-absent '{key}' failed: {e}");
+            }
+        } else {
+            apply_resetprop(key, value)?;
+        }
     }
 
     // Rebuild using all backup keys to find the contexts.
@@ -711,6 +801,9 @@ fn reap_zombie_children() {
 pub(crate) struct ResetpropSessionRequest {
     pid: u32,
     props: HashMap<String, String>,
+    /// `custom_props` 里用户显式写出的 key：不受「本机不存在就不写」门控。
+    #[serde(default)]
+    explicit_props: Vec<String>,
     delete_props: Vec<String>,
     package_name: String,
     #[serde(default)]

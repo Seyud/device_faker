@@ -1,4 +1,12 @@
-import type { AppConfig, Config, CustomProps, DeviceInfo, Template, TemplateMeta } from '../types'
+import type {
+  AppConfig,
+  Config,
+  CustomProps,
+  DeviceInfo,
+  NumericSetting,
+  Template,
+  TemplateMeta,
+} from '../types'
 
 type UnknownRecord = Record<string, unknown>
 
@@ -24,6 +32,18 @@ function asOptionalInteger(value: unknown): number | undefined {
   }
 
   return value
+}
+
+/**
+ * 数值型设置：整数照常归一化；TOML 手写的 `__DELETE__` 标记原样保留
+ * （否则保存/同步配置时会静默丢掉该标记，见 docs/CONFIG.md「特殊标记值」）。
+ */
+function asOptionalNumericSetting(value: unknown): NumericSetting | undefined {
+  if (value === '__DELETE__') {
+    return value
+  }
+
+  return asOptionalInteger(value)
 }
 
 function normalizePackages(value: unknown): string[] | undefined {
@@ -109,7 +129,7 @@ function normalizeDeviceInfoFields(source: UnknownRecord): Partial<DeviceInfo> {
   const androidVersion = asOptionalString(source.android_version)
   if (androidVersion !== undefined) normalized.android_version = androidVersion
 
-  const sdkInt = asOptionalInteger(source.sdk_int)
+  const sdkInt = asOptionalNumericSetting(source.sdk_int)
   if (sdkInt !== undefined) normalized.sdk_int = sdkInt
 
   const dpi = asOptionalInteger(source.dpi)
