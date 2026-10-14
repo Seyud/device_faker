@@ -13,6 +13,9 @@ import { extractTemplateMeta, sanitizeTemplate } from './config'
 const REQUEST_TIMEOUT_MS = 15000
 const SHELL_TIMEOUT_SECONDS = Math.ceil(REQUEST_TIMEOUT_MS / 1000)
 const DETAIL_CONCURRENCY = 6
+/** 聚合文件候选链整体重试次数（第二次尝试前等 TEMPLATE_BUNDLE_RETRY_DELAY_MS）。 */
+const TEMPLATE_BUNDLE_ATTEMPTS = 2
+const TEMPLATE_BUNDLE_RETRY_DELAY_MS = 400
 const FETCH_ACCEPT_TEXT = 'text/plain'
 const FETCH_ACCEPT_JSON = 'application/json'
 const FETCH_ACCEPT_GITHUB_JSON = 'application/vnd.github+json'
@@ -72,7 +75,15 @@ interface FileContentResponse {
 export interface TemplateIndexLoadResult {
   source: OnlineTemplateSource
   items: OnlineTemplateIndexItem[]
+  /**
+   * 聚合文件 dist/templates.toml 的 blob sha（来自同一次 git tree 响应，免费拿到）。
+   * 有它才值得尝试"一次拉全量"，同时也是整包详情的缓存版本号。
+   */
+  bundleSha?: string
 }
+
+/** 聚合文件路径：与 templates/** 同仓，结构是 `[templates."<文件名>"]`（见 config 仓的 bundle_templates.py）。 */
+export const TEMPLATE_BUNDLE_PATH = 'dist/templates.toml'
 
 export interface TemplateDetailLoadResult {
   id: string
@@ -136,6 +147,27 @@ function assertNotAborted(signal?: AbortSignal) {
   if (signal?.aborted) {
     throw new DOMException('The operation was aborted.', 'AbortError')
   }
+}
+
+/** 带中止响应的延时（重试间隔用）。 */
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      window.clearTimeout(timer)
+      reject(new DOMException('The operation was aborted.', 'AbortError'))
+    }
+    const timer = window.setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+
+    if (signal?.aborted) {
+      onAbort()
+      return
+    }
+
+    signal?.addEventListener('abort', onAbort, { once: true })
+  })
 }
 
 function escapeShellArg(value: string): string {
@@ -257,10 +289,29 @@ async function requestTextViaShell(
 
   const escapedUrl = escapeShellArg(url)
   const escapedAccept = escapeShellArg(accept)
-  const curlCommand = `curl -fsSL --connect-timeout ${SHELL_TIMEOUT_SECONDS} -H 'Accept: ${escapedAccept}' '${escapedUrl}'`
-  const wgetCommand = `wget -q -O - --timeout=${SHELL_TIMEOUT_SECONDS} --header='Accept: ${escapedAccept}' '${escapedUrl}'`
+  const timeout = SHELL_TIMEOUT_SECONDS
 
-  return await execCommand(`${curlCommand} || ${wgetCommand}`)
+  // 不写死任何 root 方案的目录，运行时按「PATH → 通用 busybox 形态」自己找工具：
+  //   · WebUI 的 exec 通常直接以 root 跑 `sh`（真机实测 id = uid=0，context u:r:magisk:s0），
+  //     没有 su 参与，因此 PATH 就是 app 继承的标准 Android PATH —— 里面基本没有 curl/wget/busybox；
+  //   · KernelSU 的 ksud su 会注入 /data/adb/ksu/bin，Magisk/WeaveMask 则不注入，
+  //     所以只按 PATH 找不够，再补一层 `*/busybox`、`*/bin/busybox` 的通用 glob（不点名具体方案）。
+  // 顺带：shell 没有 CORS 限制，所以 gitee raw（WebView fetch 拿不到，响应缺
+  // Access-Control-Allow-Origin）也能借这条兜底直接抓。
+  const script = [
+    `CURL=$(command -v curl 2>/dev/null)`,
+    `WGET=$(command -v wget 2>/dev/null)`,
+    `BB=$(command -v busybox 2>/dev/null)`,
+    `[ -z "$BB" ] && BB=$(ls /data/adb/*/busybox /data/adb/*/bin/busybox 2>/dev/null | head -n 1)`,
+    // 不要用 exec 替换 shell：真机实测 libsu 抓不到 exec 之后的输出（返回空串），
+    // 用 if/elif 顺序执行才能把 stdout 正常带回来。
+    `if [ -n "$CURL" ]; then "$CURL" -fsSL --connect-timeout ${timeout} --max-time ${timeout} -H 'Accept: ${escapedAccept}' '${escapedUrl}'`,
+    `elif [ -n "$WGET" ]; then "$WGET" -q -O - --timeout=${timeout} --header='Accept: ${escapedAccept}' '${escapedUrl}'`,
+    `elif [ -n "$BB" ]; then "$BB" wget -q -O - -T ${timeout} --header='Accept: ${escapedAccept}' '${escapedUrl}'`,
+    `else echo 'No usable HTTP tool (curl/wget/busybox) found' >&2; exit 127; fi`,
+  ].join('; ')
+
+  return await execCommand(script)
 }
 
 async function requestText(
@@ -363,10 +414,112 @@ async function loadTreeIndex(
     })
     .filter((item): item is OnlineTemplateIndexItem => item !== null)
 
+  const bundleEntry = response.tree.find(
+    (entry) => entry.type === 'blob' && entry.path === TEMPLATE_BUNDLE_PATH
+  )
+
   return {
     source,
     items: sortIndexItems(items),
+    bundleSha: bundleEntry?.sha,
   }
+}
+
+/**
+ * 一次性拉取聚合文件，返回「文件名 → 详情」的映射。
+ *
+ * 聚合文件由 config 仓的 .github/scripts/bundle_templates.py 机械拼接生成：结构与单个模板文件一致
+ * （只有 `[templates."<文件名>"]` 表），字段逐字保留，因此这里直接复用 sanitizeTemplate /
+ * extractTemplateMeta，不需要任何新 schema。失败时抛错，由调用方退回逐文件路径。
+ */
+/**
+ * 聚合文件的候选顺序（与逐文件详情不同）。
+ *
+ * 聚合文件整包只发 1 次请求，所以优先「浏览器能直接跨域取到」的路径：
+ * gitee 源的 raw 没有 CORS（WebView fetch 必失败，只能靠 shell 兜底），而且
+ * contents API 只有 60 次/小时/IP 的配额——因此顺序是 jsDelivr → contents API → gitee raw，
+ * 既不在正常情况下浪费配额，也不在 jsDelivr 挂掉时把用户丢回 700+ 次逐文件请求。
+ * （逐文件详情仍走 getDetailUrlCandidates：那里量大，必须优先无配额的 raw+shell。）
+ */
+function getBundleUrlCandidates(
+  source: OnlineTemplateSource
+): Array<{ url: string; accept: string }> {
+  if (source === 'github') {
+    return [
+      { url: buildRawUrl('github', TEMPLATE_BUNDLE_PATH), accept: FETCH_ACCEPT_TEXT },
+      { url: buildCdnUrl('github', TEMPLATE_BUNDLE_PATH), accept: FETCH_ACCEPT_TEXT },
+    ]
+  }
+
+  return [
+    { url: buildCdnUrl('gitee', TEMPLATE_BUNDLE_PATH), accept: FETCH_ACCEPT_TEXT },
+    { url: buildContentsApiUrl('gitee', TEMPLATE_BUNDLE_PATH), accept: FETCH_ACCEPT_JSON },
+    { url: buildRawUrl('gitee', TEMPLATE_BUNDLE_PATH), accept: FETCH_ACCEPT_TEXT },
+  ]
+}
+
+export async function loadTemplateBundle(
+  source: OnlineTemplateSource,
+  signal?: AbortSignal
+): Promise<Map<string, OnlineTemplateDetail>> {
+  const candidates = getBundleUrlCandidates(source)
+  let lastError: unknown = null
+
+  // 聚合文件是整个在线库的命脉：失败就退回逐文件（700+ 次请求，真机实测 3.5 分钟量级），
+  // 所以候选链整体重试一轮再放弃（CDN 冷缓存/瞬时抖动是最常见的失败原因）。
+  for (let attempt = 0; attempt < TEMPLATE_BUNDLE_ATTEMPTS; attempt += 1) {
+    if (attempt > 0) {
+      await delay(TEMPLATE_BUNDLE_RETRY_DELAY_MS, signal)
+      assertNotAborted(signal)
+    }
+
+    for (const candidate of candidates) {
+      try {
+        const content =
+          candidate.accept === FETCH_ACCEPT_JSON
+            ? await fetchTemplateContentViaContentsApi(source, candidate.url, signal)
+            : await requestText(candidate.url, signal, FETCH_ACCEPT_TEXT)
+
+        if (!content.trim()) {
+          lastError = new Error('Template bundle is empty.')
+          continue
+        }
+
+        const parsed = parseToml(content) as unknown
+        if (!isRecord(parsed) || !isRecord(parsed.templates)) {
+          lastError = new Error('Template bundle does not contain a valid templates section.')
+          continue
+        }
+
+        const details = new Map<string, OnlineTemplateDetail>()
+        for (const [key, value] of Object.entries(parsed.templates)) {
+          if (!isRecord(value)) {
+            continue
+          }
+
+          details.set(key, {
+            template: sanitizeTemplate(value as Template),
+            meta: extractTemplateMeta(value) as TemplateMeta | undefined,
+          })
+        }
+
+        if (details.size === 0) {
+          lastError = new Error('Template bundle contains no templates.')
+          continue
+        }
+
+        return details
+      } catch (error) {
+        if (isAbortError(error)) {
+          throw error
+        }
+
+        lastError = error
+      }
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('Template bundle is unavailable.')
 }
 
 function getSourceFailoverOrder(preferredSource: OnlineTemplateSource): OnlineTemplateSource[] {
