@@ -189,7 +189,20 @@ impl MyModule {
         }
 
         if merged.companion_resetprop {
-            // 全属性走 companion resetprop（getprop 和进程内读取一致）
+            // 全属性走 companion resetprop（getprop 和进程内读取一致）。
+            //
+            // 同时在进程内做一遍 COW（hybrid）：
+            //   1. 消除 D1 冷启动窗口 —— 全局 properties 要等 `FG == 包名` 事件才 apply，
+            //      在这之前 app 早期读取会看到真值；进程内 patch 发生在
+            //      `pre_app_specialize`，早于任何 app 代码。
+            //   2. 修复「app 域不可读的属性区」（如 HyperOS 的 vendor_default_prop）：
+            //      companion 写得进文件但 app 读不到，只有进程内私有副本可见。
+            //   3. COW 克隆会把被克隆节点的 `context_` 改写成 app 可读 context
+            //      （见 `PropBackend::repoint_area_and_relabel`），否则 bionic 在
+            //      specialize 后的 SELinux 复查会 munmap 掉克隆（真机实测）。
+            // 全局与进程内写的是同一批值，getprop 与进程内读取仍然一致。
+            let _ = cow_props::apply_cow_spoof(&prop_map, &explicit_props);
+
             let delete_props = Config::build_delete_props_list(&merged);
             if !prop_map.is_empty() || !delete_props.is_empty() || merged.dpi.is_some() {
                 if let Err(e) = spoof_system_props_via_companion(
@@ -258,6 +271,18 @@ impl MyModule {
                     info!("Companion dpi applied for {package_name}");
                 }
             }
+        }
+
+        // ②-bis 不可读 context 的进程内合成（S4）
+        //   有些属性区对 app 域不可读（如 HyperOS 的 vendor_default_prop）：companion
+        //   全局 resetprop 写得进文件但 app 读不到，严格 COW 也会因「路由区未映射」
+        //   跳过。这里对 custom_props 里**显式**写出的这类 key，在进程内合成匿名
+        //   属性区并挂到对应 context 节点，使 SystemProperties.get 在本进程可见。
+        //   两种模式都执行：它只补「本进程永远读不到」的缺口，不改任何真实映射。
+        if let Err(e) =
+            cow_props::apply_unreadable_ctx_synth(&prop_map, &explicit_props, &merged.hide_maps)
+        {
+            warn!("Unreadable-context property synth failed: {e:#}");
         }
 
         // ③ DlClose（始终执行）

@@ -190,7 +190,24 @@ pub struct PropBackend {
     pa_off: usize,
 }
 
+/// 进程内缓存：属性后端结构解析一次即可。
+///
+/// 必须在第一次 COW 克隆**之前**解析——克隆会把 context 节点的 `prop_area_`
+/// 改成匿名副本，之后 `find_context_array` 的「非零节点必须落在真实
+/// `/dev/__properties__` 映射里」校验就会失败（真机实测报
+/// `no self-consistent context array in backend`）。
+static BACKEND: std::sync::OnceLock<PropBackend> = std::sync::OnceLock::new();
+
 impl PropBackend {
+    /// 带缓存的解析（成功结果在进程内复用）。
+    pub fn resolve_cached() -> anyhow::Result<&'static Self> {
+        if let Some(b) = BACKEND.get() {
+            return Ok(b);
+        }
+        let b = Self::resolve()?;
+        Ok(BACKEND.get_or_init(|| b))
+    }
+
     /// 运行期解析 bionic 属性后端。失败时返回 `Err`，调用方应降级。
     pub fn resolve() -> anyhow::Result<Self> {
         let maps = Maps::load();
@@ -248,20 +265,75 @@ impl PropBackend {
         })
     }
 
-    /// 把所有 `prop_area_ == from` 的 context 节点改指向 `to`，返回改写个数。
+    /// `ContextNode::context_` 字段地址。
     ///
-    /// 改写 `to == 0` 之外的值前请确认 `to` 是一个内容自洽的属性区副本：
-    /// 此后进程内所有该区的属性读取都会走副本。
-    pub fn repoint_area(&self, from: usize, to: usize) -> usize {
+    /// bionic 布局（`system_properties/include/system_properties/context_node.h`）：
+    /// `Lock lock_`(+0x00) / `const char* context_`(+0x08) / `prop_area* pa_`(+0x10) /
+    /// `bool no_access_`(+0x18) / `const char* filename_`(+0x20)，stride 0x28。
+    /// 故 `context_ = pa_off - 8`。
+    fn context_slot(&self, idx: usize) -> usize {
+        self.contexts + idx * self.stride + self.pa_off.saturating_sub(8)
+    }
+
+    /// 改装第 `idx` 个节点保存的 context 名指针。
+    ///
+    /// bionic specialize 之后会跑 `SystemProperties::Init()`（`initialized_` 已为 true
+    /// 的分支）→ `ContextsSerialized::ResetAccess()` → 每个节点
+    /// `ContextNode::ResetAccess()`：`access("<props_dir>/<context_>", R_OK)` 失败就
+    /// `Unmap()` 掉 `prop_area_` 并把 `no_access_` 置真。
+    ///
+    /// 所以把不可读 context 的 `context_` 换成 app 域可读的 context 名（`default_prop`），
+    /// 复查即可通过、我们挂上去的私有区/合成区不会被回收；属性**路由**由 property_info
+    /// 的 entry 表决定（名字 → context 下标），本次改动不碰路由，因此读取路径不变。
+    pub fn set_node_context(&self, idx: usize, ptr: usize) {
+        if idx >= self.count {
+            return;
+        }
+        unsafe { write_u64(self.context_slot(idx), ptr as u64) };
+    }
+
+    /// 把所有 `prop_area_ == from` 的节点改指向 `to`，并把它们的 `context_`
+    /// 改指向 `label`（app 可读的 context 名字符串，由调用方保证活到进程结束）。
+    /// 返回改写个数。
+    pub fn repoint_area_and_relabel(&self, from: usize, to: usize, label: usize) -> usize {
         let mut n = 0;
         for i in 0..self.count {
             let slot = self.contexts + i * self.stride + self.pa_off;
-            if unsafe { read_u64(slot) } as usize == from {
+            if (unsafe { read_u64(slot) }) as usize == from {
                 unsafe { write_u64(slot, to as u64) };
+                self.set_node_context(i, label);
                 n += 1;
             }
         }
         n
+    }
+
+    /// context 节点总数（`num_contexts_`）。
+    pub fn node_count(&self) -> usize {
+        self.count
+    }
+
+    /// 读取第 `idx` 个 context 节点的 `prop_area_`；0 表示该 context 的属性区
+    /// **尚未映射进本进程**（惰性打开失败 / SELinux 拒绝 / 从未被查询）。
+    pub fn node_area(&self, idx: usize) -> usize {
+        if idx >= self.count {
+            return 0;
+        }
+        let slot = self.contexts + idx * self.stride + self.pa_off;
+        (unsafe { read_u64(slot) }) as usize
+    }
+
+    /// 把第 `idx` 个 context 节点的 `prop_area_` 改成 `addr`（0 = 清空）。
+    ///
+    /// 用于给「永不映射」的 context（app 域被 SELinux 拒绝的属性区）挂上进程内
+    /// 合成的匿名属性区：挂上之后该 context 的读取走合成区，真实区文件完全不碰。
+    /// 调用方必须保证 `addr` 指向一个内容自洽且活到进程结束的 `prop_area`。
+    pub fn set_node_area(&self, idx: usize, addr: usize) {
+        if idx >= self.count {
+            return;
+        }
+        let slot = self.contexts + idx * self.stride + self.pa_off;
+        unsafe { write_u64(slot, addr as u64) };
     }
 }
 
