@@ -28,6 +28,10 @@ default_force_denylist_unmount = false
 > - `userId` 对应路径 `/data/user/<userId>/...` 中的数字（例如 `0`、`999`）
 > - 匹配优先级：先匹配 `com.example.app@userId`，找不到再回退匹配 `com.example.app`
 > - 该写法同时适用于 `apps` 里的 `package` 和模板的 `packages` 列表
+> - **裸包名（不带 `@userId`）是「user 0 的配置」+「所有分身/多开用户（非 0）的回退配置」双语义**。
+>   因此想让主应用和它的分身用不同模板时，裸包名只写在一个模板里，分身在另一个模板里写
+>   `com.example.app@999`；**不要把同一个裸包名同时写进两个模板**（运行时只认书写顺序第一个，
+>   WebUI 会给出重复包名告警）。反过来，修改裸包名的配置会影响所有依赖回退的分身。
 
 ### 方式一：机型模板
 

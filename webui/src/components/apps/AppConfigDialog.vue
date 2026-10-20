@@ -41,6 +41,11 @@
       </div>
     </div>
 
+    <!-- 继承提示：分身当前只是回退命中主应用的裸包名配置，本实例尚无自有条目 -->
+    <p v-if="inheritedHintVisible" class="inherited-hint">
+      {{ t('apps.dialog.inherited_hint', { base: inheritedBase }) }}
+    </p>
+
     <!-- 模板配置界面 -->
     <div v-if="activeTab === 'template'" class="template-selector">
       <el-input
@@ -103,7 +108,13 @@ import { toast } from 'kernelsu-alt'
 import type { InstalledApp, AppConfig } from '../../types'
 import { provideDeviceFakerForm } from '../../composables/useDeviceFakerForm'
 import DeviceFakerFormFields from '../shared/DeviceFakerFormFields.vue'
-import { runtimeConfigKeys } from '../../utils/package'
+import {
+  configWriteKey,
+  filterOutOwnConfigKeys,
+  findOwnConfigKey,
+  ownConfigKeys,
+  parsePackageUser,
+} from '../../utils/package'
 
 interface TemplateOption {
   name: string
@@ -134,25 +145,14 @@ const hasTemplateConfig = ref(false)
 
 const originalCustomConfig = ref<AppConfig | null>(null)
 const originalTemplateName = ref<string | null>(null)
-/** 运行时命中的配置键（可能是 base@userId 或裸 base），删除/保存时用它而非列表展示名 */
+/** 运行时命中的配置键（含可能继承主应用的裸 base 回退键），写回时会换算成本实例自有键 */
 const resolvedConfigKey = ref<string | null>(null)
+/** 当前配置是否只是「回退命中主应用的裸包名条目」（分身未单独配置） */
+const customInherited = ref(false)
+const templateInherited = ref(false)
 
-function resolveConfigPackageKey(
-  packageName: string,
-  candidates: readonly string[]
-): string | null {
-  return runtimeConfigKeys(packageName).find((key) => candidates.includes(key)) ?? null
-}
-
-function templateHasPackage(templatePackages: readonly string[] | undefined, packageName: string) {
-  if (!templatePackages?.length) return false
-  return resolveConfigPackageKey(packageName, templatePackages) !== null
-}
-
-function filterOutRuntimeKeys(templatePackages: readonly string[], packageName: string): string[] {
-  const keys = new Set(runtimeConfigKeys(packageName))
-  return templatePackages.filter((p) => !keys.has(p))
-}
+const inheritedBase = computed(() => parsePackageUser(props.app?.packageName || '').base)
+const inheritedHintVisible = computed(() => customInherited.value || templateInherited.value)
 
 const selectedTemplate = ref('')
 const templateSearch = ref('')
@@ -223,67 +223,129 @@ function handleConfigToggle(type: 'custom' | 'template', enabled: boolean) {
   }
 }
 
+/**
+ * 只移除本实例自有键。分身的裸 base 键是「主应用的键 + 分身回退键」，绝不能由分身编辑删除
+ * （历史 bug：分身改模板把主应用的 packages 一并清空，主应用变「未配置」）。
+ */
+function removeOwnAppEntries(packageName: string): boolean {
+  let removed = false
+  for (const key of ownConfigKeys(packageName)) {
+    if (!configStore.getApps().some((app) => app.package === key)) continue
+    configStore.deleteApp(key)
+    removed = true
+  }
+  return removed
+}
+
+function removeOwnTemplateEntries(packageName: string): boolean {
+  let removed = false
+  for (const { name, template } of configStore.templateEntries) {
+    if (!template.packages?.length) continue
+    const packages = filterOutOwnConfigKeys(template.packages, packageName)
+    if (packages.length === template.packages.length) continue
+    configStore.setTemplate(name, { ...template, packages })
+    removed = true
+  }
+  return removed
+}
+
+function hasOwnAppEntry(packageName: string): boolean {
+  const own = new Set(ownConfigKeys(packageName))
+  return configStore.getApps().some((app) => own.has(app.package))
+}
+
+function hasOwnTemplateEntry(packageName: string): boolean {
+  return configStore.templateEntries.some(
+    ({ template }) => findOwnConfigKey(template.packages, packageName) !== null
+  )
+}
+
+/** 配置只继承自主应用的裸包名条目：无法在本实例内移除，提示用户去主应用处理。 */
+function notifyInherited() {
+  toast(t('apps.messages.inherited_config', { base: inheritedBase.value }))
+}
+
+/**
+ * 表单当前值与原配置是否等价（忽略空串/空对象/空数组，避免 fillFromAppConfig→toAppConfig
+ * 往返把 undefined 写成 '' 造成假差异）。用于「没改就不落盘」：分身仅继承主应用配置时，
+ * 打开对话框直接点确定不应静默把继承配置固化成本实例条目（否则此后不再跟随主应用改动）。
+ */
+function isFormEquivalentToAppConfig(original: AppConfig, packageName: string): boolean {
+  const canonical = (config: AppConfig): string =>
+    JSON.stringify(
+      Object.entries(config)
+        .filter(([key, value]) => {
+          if (key === 'package') return false
+          if (value === undefined || value === null || value === '') return false
+          if (Array.isArray(value)) return value.length > 0
+          if (typeof value === 'object') return Object.keys(value as object).length > 0
+          return true
+        })
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    )
+
+  return canonical(toAppConfig(packageName)) === canonical(original)
+}
+
 function syncFromExistingConfig() {
   if (!props.app) return
 
   templateSearch.value = ''
   const packageName = props.app.packageName
-  const runtimeKeys = runtimeConfigKeys(packageName)
 
-  const appConfig =
-    runtimeKeys
-      .map((key) => configStore.getApps().find((a) => a.package === key))
-      .find((a): a is AppConfig => Boolean(a)) ?? null
+  // 与 Rust 运行时严格同源（src/lib.rs + src/config.rs get_merged_config）：
+  // 键优先（pkg@uid → 裸 pkg），命中第一个键即停；同一键内 [[apps]] 先于模板。
+  // 不能用「先按模板书写顺序遍历」或「两类配置各自跨键扫描」：
+  //  - 前者让先书写模板里的裸回退键遮蔽后书写模板的 @uid 精确键（分身显示主应用模板）；
+  //  - 后者会把更靠后键上的另一类配置当成生效项（例：分身在 @uid 键被模板命中时，
+  //    裸 base 上的 [[apps]] 条目对分身并不生效，不能显示成「继承的自定义配置」）。
+  const matches = configStore.resolvePackageMatchesFor(packageName)
+  const appMatch = matches?.appMatch ?? null
+  const templateMatch = matches?.templateMatch ?? null
 
-  if (appConfig) {
+  resolvedConfigKey.value = matches?.key ?? null
+
+  if (appMatch) {
     hasCustomConfig.value = true
-    originalCustomConfig.value = { ...appConfig }
-    resolvedConfigKey.value = appConfig.package
-    fillFromAppConfig(appConfig)
+    customInherited.value = appMatch.inherited
+    originalCustomConfig.value = { ...appMatch.app }
+    fillFromAppConfig(appMatch.app)
   } else {
     hasCustomConfig.value = false
+    customInherited.value = false
     originalCustomConfig.value = null
-    resolvedConfigKey.value = null
     resetForm()
   }
 
-  let foundTemplateName: string | null = null
-  let foundTemplateKey: string | null = null
-  for (const [name, template] of Object.entries(templates.value)) {
-    const key = resolveConfigPackageKey(packageName, template.packages ?? [])
-    if (key) {
-      foundTemplateName = name
-      foundTemplateKey = key
-      break
-    }
-  }
-
-  if (foundTemplateName && foundTemplateKey) {
+  if (templateMatch) {
     hasTemplateConfig.value = true
-    originalTemplateName.value = foundTemplateName
-    selectedTemplate.value = foundTemplateName
-    resolvedConfigKey.value ??= foundTemplateKey
+    templateInherited.value = templateMatch.inherited
+    originalTemplateName.value = templateMatch.templateName
+    selectedTemplate.value = templateMatch.templateName
   } else {
     hasTemplateConfig.value = false
+    templateInherited.value = false
     originalTemplateName.value = null
     selectedTemplate.value = ''
   }
 
-  if (hasCustomConfig.value) {
-    activeTab.value = 'custom'
-  } else if (hasTemplateConfig.value) {
-    activeTab.value = 'template'
-  } else {
-    activeTab.value = 'custom'
-  }
+  // 默认展示运行时真正生效的那一种：同一个键内 [[apps]] 先于模板
+  activeTab.value = appMatch ? 'custom' : templateMatch ? 'template' : 'custom'
 }
 
 async function removeCustomConfig() {
   if (!props.app) return
 
-  const deleteKey = resolvedConfigKey.value ?? props.app.packageName
-  configStore.deleteApp(deleteKey)
+  const packageName = props.app.packageName
+  // 继承来的条目没有本实例自有键：删不掉，也不能删（会连主应用一起废掉）
+  if (!hasOwnAppEntry(packageName)) {
+    notifyInherited()
+    return
+  }
+
+  removeOwnAppEntries(packageName)
   hasCustomConfig.value = false
+  customInherited.value = false
   originalCustomConfig.value = null
   resetForm()
 
@@ -299,16 +361,14 @@ async function removeTemplateConfig() {
   if (!props.app) return
 
   const packageName = props.app.packageName
-  const allTemplates = configStore.getTemplates()
-  for (const [name, template] of Object.entries(allTemplates)) {
-    if (!template.packages?.length) continue
-    if (!templateHasPackage(template.packages, packageName)) continue
-
-    template.packages = filterOutRuntimeKeys(template.packages, packageName)
-    configStore.setTemplate(name, template)
+  if (!hasOwnTemplateEntry(packageName)) {
+    notifyInherited()
+    return
   }
 
+  removeOwnTemplateEntries(packageName)
   hasTemplateConfig.value = false
+  templateInherited.value = false
   originalTemplateName.value = null
   selectedTemplate.value = ''
 
@@ -324,8 +384,14 @@ async function saveAppConfig() {
   if (!props.app) return
 
   const packageName = props.app.packageName
-  // 优先写回已命中的配置键，避免列表裸名与配置 @0 并存导致双写
-  const configKey = resolvedConfigKey.value ?? packageName
+  const writeKey = configWriteKey(packageName, resolvedConfigKey.value)
+
+  // 只是继承主应用的条目时，「取消勾选/移除」在本实例里没有可删的东西：不阻断保存其他改动，
+  // 只在结束后提示原因（裸 base 键绝不能由分身删改）。
+  const keepsInheritedTemplate =
+    !hasTemplateConfig.value && templateInherited.value && !hasOwnTemplateEntry(packageName)
+  const keepsInheritedCustom =
+    !hasCustomConfig.value && customInherited.value && !hasOwnAppEntry(packageName)
 
   if (hasTemplateConfig.value) {
     if (!selectedTemplate.value) {
@@ -333,55 +399,66 @@ async function saveAppConfig() {
       return
     }
 
-    if (originalTemplateName.value && originalTemplateName.value !== selectedTemplate.value) {
+    const targetName = selectedTemplate.value
+    if (!templates.value[targetName]) {
+      toast(t('apps.messages.select_template'))
+      return
+    }
+
+    // 只有「换了模板」或「新启用模板配置」才写盘：原模板未变时不重复写，
+    // 尤其不能把继承自主应用的裸 base 键误固化成该分身的自有条目。
+    const templateSelectionChanged =
+      !originalTemplateName.value || originalTemplateName.value !== targetName
+
+    if (originalTemplateName.value && templateSelectionChanged) {
+      // 换模板：只把本实例自有键从旧模板剔除；主应用的裸 base 键与别的分身键原样保留
       const oldTemplate = templates.value[originalTemplateName.value]
-      if (oldTemplate && oldTemplate.packages) {
-        oldTemplate.packages = filterOutRuntimeKeys(oldTemplate.packages, packageName)
-        configStore.setTemplate(originalTemplateName.value, oldTemplate)
+      if (oldTemplate?.packages?.length) {
+        const packages = filterOutOwnConfigKeys(oldTemplate.packages, packageName)
+        if (packages.length !== oldTemplate.packages.length) {
+          configStore.setTemplate(originalTemplateName.value, { ...oldTemplate, packages })
+        }
       }
     }
 
-    const template = templates.value[selectedTemplate.value]
-    if (template) {
-      if (!template.packages) {
-        template.packages = []
-      }
-      // 若已有 runtime 命中键则复用；否则写入当前列表包名
-      const existingKey = resolveConfigPackageKey(packageName, template.packages)
-      const keyToWrite = existingKey ?? configKey
-      if (!template.packages.includes(keyToWrite)) {
-        template.packages.push(keyToWrite)
-        configStore.setTemplate(selectedTemplate.value, template)
+    if (templateSelectionChanged) {
+      const targetTemplate = templates.value[targetName]
+      if (targetTemplate) {
+        const packages = targetTemplate.packages ? [...targetTemplate.packages] : []
+        // 复用本实例已有键；继承来的裸 base 键不算命中，分身必须写 pkg@uid
+        const existingOwnKey = findOwnConfigKey(packages, packageName)
+        const keyToWrite = existingOwnKey ?? writeKey
+        if (!packages.includes(keyToWrite)) {
+          packages.push(keyToWrite)
+          configStore.setTemplate(targetName, { ...targetTemplate, packages })
+        }
       }
     }
   } else {
-    const allTemplates = configStore.getTemplates()
-    for (const [name, template] of Object.entries(allTemplates)) {
-      if (!template.packages?.length) continue
-      if (!templateHasPackage(template.packages, packageName)) continue
-
-      template.packages = filterOutRuntimeKeys(template.packages, packageName)
-      configStore.setTemplate(name, template)
-    }
+    removeOwnTemplateEntries(packageName)
   }
 
   if (hasCustomConfig.value) {
-    const appConfig = toAppConfig(configKey)
-    // 若配置键与展示名不同，清理可能残留的展示名条目
-    if (configKey !== packageName) {
-      configStore.deleteApp(packageName)
+    // 继承自主应用的条目：只有表单实际改动才落成该分身的自有条目（没改就不写盘）
+    const inheritedAndUnchanged =
+      customInherited.value &&
+      originalCustomConfig.value !== null &&
+      isFormEquivalentToAppConfig(originalCustomConfig.value, packageName)
+    if (!inheritedAndUnchanged) {
+      configStore.setApp(toAppConfig(writeKey))
     }
-    configStore.setApp(appConfig)
   } else {
-    for (const key of runtimeConfigKeys(packageName)) {
-      configStore.deleteApp(key)
-    }
-    configStore.deleteApp(packageName)
+    removeOwnAppEntries(packageName)
   }
 
   try {
     await configStore.saveConfig()
-    toast(t('apps.messages.saved'))
+    if (keepsInheritedTemplate || keepsInheritedCustom) {
+      // 其他改动已保存；被继承的那一份无法在本实例内移除，单独提示
+      notifyInherited()
+    } else {
+      toast(t('apps.messages.saved'))
+    }
     visible.value = false
     emit('saved')
   } catch {
@@ -453,6 +530,17 @@ watch(selectedTemplate, (val) => {
 .config-tab.active .tab-label {
   color: var(--primary-color, #409eff);
   font-weight: 600;
+}
+
+.inherited-hint {
+  margin: 0 0 1rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.375rem;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--primary-color, #409eff) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--primary-color, #409eff) 25%, transparent);
 }
 
 .template-selector,

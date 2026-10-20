@@ -339,12 +339,14 @@ export const messages = {
         remove_hint: '确定要移除该应用的伪装配置吗？',
         remove_custom_config: '移除自定义配置',
         remove_template_config: '移除模板配置',
+        inherited_hint: '该分身的配置继承自主应用 {base}；修改后会固化为该分身自己的配置。',
       },
       messages: {
         select_template: '请选择模板',
         saved: '配置已保存',
         custom_config_removed: '自定义配置已移除',
         template_config_removed: '模板配置已移除',
+        inherited_config: '该配置继承自主应用 {base}，无法单独移除；保存一次即可固化为分身独立配置',
       },
     },
     settings: {
@@ -743,12 +745,16 @@ export const messages = {
         remove_hint: 'Are you sure to remove the spoofing config for this app?',
         remove_custom_config: 'Remove Custom Config',
         remove_template_config: 'Remove Template Config',
+        inherited_hint:
+          "This clone inherits its config from the base app {base}. Any change will be pinned as this clone's own config.",
       },
       messages: {
         select_template: 'Please select a template',
         saved: 'Config saved',
         custom_config_removed: 'Custom config removed',
         template_config_removed: 'Template config removed',
+        inherited_config:
+          'This config is inherited from the base app {base} and cannot be removed separately. Save once to pin an independent config for this clone',
       },
     },
     settings: {
@@ -1154,12 +1160,16 @@ export const messages = {
           'Bu uygulama için sahtekarlık yapılandırmasını kaldırmak istediğinizden emin misiniz?',
         remove_custom_config: 'Özel Yapılandırmayı Kaldır',
         remove_template_config: 'Şablon Yapılandırmasını Kaldır',
+        inherited_hint:
+          'Bu klon yapılandırmasını {base} ana uygulamasından devralır. Yapılan değişiklikler bu klona ait ayrı bir yapılandırma olarak sabitlenir.',
       },
       messages: {
         select_template: 'Lütfen bir şablon seçin',
         saved: 'Yapılandırma kaydedildi',
         custom_config_removed: 'Özel yapılandırma kaldırıldı',
         template_config_removed: 'Şablon yapılandırması kaldırıldı',
+        inherited_config:
+          'Bu yapılandırma {base} ana uygulamasından devralınmıştır ve ayrı olarak kaldırılamaz. Klon için bağımsız yapılandırma sabitlemek üzere bir kez kaydedin',
       },
     },
     settings: {

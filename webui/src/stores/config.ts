@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import type { Config, Template, AppConfig } from '../types'
 import { readFile, writeFile, fileExists, mkdir } from '../utils/ksu'
 import { parse as parseToml, stringify as stringifyToml } from 'smol-toml'
-import { anyConfigApplies, runtimeConfigKeys } from '../utils/package'
+import { anyConfigApplies, resolvePackageConfig, resolvePackageMatches } from '../utils/package'
 import { toast } from 'kernelsu-alt'
 import { useI18n } from '../utils/i18n'
 import {
@@ -363,24 +363,26 @@ export const useConfigStore = defineStore('config', () => {
     return anyConfigApplies(collectConfigPackageNames(), packageName)
   }
 
-  // 获取包名的配置（按 runtime 优先级：先 base@userId，再裸 base）
+  // 获取包名的最终配置（与 Rust 运行时同序：键优先，同键内 apps 先于模板）
   function getPackageConfig(
     packageName: string
   ): (Template & { source: string }) | AppConfig | null {
-    for (const key of runtimeConfigKeys(packageName)) {
-      const exactApp = apps.value.find((a) => a.package === key)
-      if (exactApp) {
-        return exactApp
-      }
-
-      for (const [name, template] of Object.entries(templates.value)) {
-        if (template.packages?.includes(key)) {
-          return { ...template, source: name }
-        }
-      }
+    const resolved = resolvePackageConfig(packageName, apps.value, templateEntries.value)
+    if (!resolved) {
+      return null
     }
 
-    return null
+    return resolved.kind === 'app'
+      ? resolved.app
+      : { ...resolved.template, source: resolved.templateName }
+  }
+
+  /**
+   * 逐键扫描、命中即停的解析结果：同一键上的 [[apps]] / 模板两类命中 + 是否继承主应用回退配置。
+   * 配置对话框用它判断「本实例到底用哪份配置」（与 Rust 运行时严格同源，不跨键混用）。
+   */
+  function resolvePackageMatchesFor(packageName: string) {
+    return resolvePackageMatches(packageName, apps.value, templateEntries.value)
   }
 
   return {
@@ -413,5 +415,6 @@ export const useConfigStore = defineStore('config', () => {
     getDeviceFakerCount,
     isPackageConfigured,
     getPackageConfig,
+    resolvePackageMatchesFor,
   }
 })
