@@ -320,6 +320,7 @@ export const messages = {
         configured: '已配置',
         unconfigured: '未配置',
         not_installed: '未安装',
+        inherited: '继承自主应用',
       },
       empty: {
         search: '未找到匹配的应用',
@@ -340,6 +341,9 @@ export const messages = {
         remove_custom_config: '移除自定义配置',
         remove_template_config: '移除模板配置',
         inherited_hint: '该分身的配置继承自主应用 {base}；修改后会固化为该分身自己的配置。',
+        scope_user0: '生效范围：仅主应用（user 0）',
+        scope_fallback: '生效范围：主应用 + 所有分身（回退）',
+        scope_clone: '生效范围：仅分身 user {uid}',
       },
       messages: {
         select_template: '请选择模板',
@@ -726,6 +730,7 @@ export const messages = {
         configured: 'Configured',
         unconfigured: 'Unconfigured',
         not_installed: 'Not installed',
+        inherited: 'Inherited from base app',
       },
       empty: {
         search: 'No matching apps found',
@@ -747,6 +752,9 @@ export const messages = {
         remove_template_config: 'Remove Template Config',
         inherited_hint:
           "This clone inherits its config from the base app {base}. Any change will be pinned as this clone's own config.",
+        scope_user0: 'Applies to: base app only (user 0)',
+        scope_fallback: 'Applies to: base app + all clones (fallback)',
+        scope_clone: 'Applies to: clone user {uid} only',
       },
       messages: {
         select_template: 'Please select a template',
@@ -1140,6 +1148,7 @@ export const messages = {
         configured: 'Yapılandırıldı',
         unconfigured: 'Yapılandırılmadı',
         not_installed: 'Kurulu Değil',
+        inherited: 'Ana uygulamadan devralındı',
       },
       empty: {
         search: 'Eşleşen hiçbir uygulama bulunamadı',
@@ -1162,6 +1171,9 @@ export const messages = {
         remove_template_config: 'Şablon Yapılandırmasını Kaldır',
         inherited_hint:
           'Bu klon yapılandırmasını {base} ana uygulamasından devralır. Yapılan değişiklikler bu klona ait ayrı bir yapılandırma olarak sabitlenir.',
+        scope_user0: 'Kapsam: yalnızca ana uygulama (user 0)',
+        scope_fallback: 'Kapsam: ana uygulama + tüm klonlar (yedek)',
+        scope_clone: 'Kapsam: yalnızca klon user {uid}',
       },
       messages: {
         select_template: 'Lütfen bir şablon seçin',

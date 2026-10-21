@@ -36,6 +36,38 @@ export function runtimeConfigKeys(packageName: string): string[] {
 }
 
 /**
+ * 实例身份键：user 0 的裸名与 `pkg@0` 属于**同一个实例**；非零用户按 `pkg@uid` 区分。
+ * 仅用于 UI 去重与展示，不参与运行时查找（运行时仍按 runtimeConfigKeys 逐键匹配）。
+ */
+export function packageInstanceKey(packageName: string): string {
+  const { base, userId } = parsePackageUser(packageName)
+  return `${base}@${userId}`
+}
+
+/** 实例的展示包名：user 0 统一显示裸名（`pkg@0` 与裸名是同一实例，不该出现两行）。 */
+export function packageDisplayName(packageName: string): string {
+  const { base, userId } = parsePackageUser(packageName)
+  return userId === 0 ? base : `${base}@${userId}`
+}
+
+/**
+ * 配置键的作用范围（镜像运行时语义，供 UI 明示）：
+ * - `user0`：`pkg@0` —— 仅 user 0（精确键优先于裸名，分身不会命中）
+ * - `fallback`：裸 `pkg` —— user 0 **以及所有分身**的回退配置
+ * - `clone`：`pkg@uid`（uid ≠ 0）—— 仅该分身
+ */
+export type ConfigKeyScope = 'user0' | 'fallback' | 'clone'
+
+export function configKeyScope(key: string): ConfigKeyScope {
+  const match = key.match(/@(\d+)$/)
+  if (!match) {
+    return 'fallback'
+  }
+
+  return Number(match[1]) === 0 ? 'user0' : 'clone'
+}
+
+/**
  * 该实例**自有**（可安全写/删）的配置键。
  *
  * - 非零用户 `pkg@uid`：只有 `pkg@uid`。裸 `pkg` 是主应用（user 0）的键、且是分身回退键，

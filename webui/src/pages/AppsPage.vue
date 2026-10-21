@@ -43,6 +43,8 @@ import { useI18n } from '../utils/i18n'
 import {
   installedLookupKeys,
   normalizePackageName,
+  packageDisplayName,
+  packageInstanceKey,
   parsePackageUser,
   runtimeConfigKeys,
 } from '../utils/package'
@@ -51,6 +53,8 @@ import type { InstalledApp } from '../types'
 type FilterType = 'all' | 'configured'
 type AppListItem = InstalledApp & {
   configured: boolean
+  /** 该实例本身没有自有配置，只是回退命中主应用的裸包名条目（分身常见） */
+  inherited: boolean
   /** 预计算的小写包名/应用名,避免每次键入搜索词都对全量列表做 toLowerCase */
   pkgLower: string
   nameLower: string
@@ -66,12 +70,18 @@ function buildSortKey(packageName: string, installed: boolean): string {
   return `${base}\u0000${String(userId).padStart(8, '0')}\u0000${installed ? '0' : '1'}`
 }
 
-function buildListEntry(app: InstalledApp, configured: boolean, installed: boolean): AppListItem {
+function buildListEntry(
+  app: InstalledApp,
+  configured: boolean,
+  installed: boolean,
+  inherited: boolean
+): AppListItem {
   const appName = app.appName || app.packageName
   return {
     ...app,
     appName,
     configured,
+    inherited,
     pkgLower: app.packageName.toLowerCase(),
     nameLower: appName.toLowerCase(),
     sortKey: buildSortKey(app.packageName, installed),
@@ -189,17 +199,35 @@ function getResolvedPackageInfo(packageName: string) {
   return resolvedPackageInfo.value[packageName]
 }
 
+/**
+ * 该实例是否只是「回退命中主应用的裸包名条目」（自身没有自有配置）。
+ * 例：分身 com.app@999 只配了裸 com.app 时 → true（运行时确实继承主应用配置）。
+ */
+function isInheritedConfig(packageName: string): boolean {
+  const matches = configStore.resolvePackageMatchesFor(packageName)
+  if (!matches) return false
+
+  return (matches.appMatch ?? matches.templateMatch)?.inherited ?? false
+}
+
 const allApps = computed<AppListItem[]>(() => {
   const result: AppListItem[] = []
   const packageIndex = new Map<string, number>()
   const normalizedIndex = new Map<string, number>()
+  // 实例身份 → 行下标：user 0 的裸名与 pkg@0 是同一实例，不能再出一行
+  const instanceIndex = new Map<string, number>()
 
   // 保留已安装应用的原始顺序
   for (const app of installedApps.value) {
     const normalized = normalizePackageName(app.packageName)
     if (packageIndex.has(app.packageName)) continue
 
-    const entry = buildListEntry(app, isConfiguredPackage(app.packageName), app.installed ?? true)
+    const entry = buildListEntry(
+      app,
+      isConfiguredPackage(app.packageName),
+      app.installed ?? true,
+      isInheritedConfig(app.packageName)
+    )
 
     const idx = result.length
     result.push(entry)
@@ -207,11 +235,17 @@ const allApps = computed<AppListItem[]>(() => {
     if (!normalizedIndex.has(normalized)) {
       normalizedIndex.set(normalized, idx)
     }
+    const instance = packageInstanceKey(app.packageName)
+    if (!instanceIndex.has(instance)) {
+      instanceIndex.set(instance, idx)
+    }
   }
 
-  // 合并配置项：如果包名不同（即使归一化后相同），也应显示为不同应用
+  // 合并配置项：不同实例（不同 userId）应显示为不同应用；
+  // 但同一实例的等价写法（裸名 vs pkg@0）必须合并到已存在的那一行。
   for (const app of configuredPackageState.value.configuredApps) {
     if (packageIndex.has(app.packageName)) continue
+    if (instanceIndex.has(packageInstanceKey(app.packageName))) continue
 
     // 查找具有相同归一化包名的已存在应用，复用其展示信息
     const normalized = normalizePackageName(app.packageName)
@@ -219,24 +253,28 @@ const allApps = computed<AppListItem[]>(() => {
     const existingApp = existingIdx !== undefined ? result[existingIdx] : undefined
     const resolvedInfo = getResolvedPackageInfo(app.packageName)
     const installed = isInstalledPackage(app.packageName)
+    const displayName = packageDisplayName(app.packageName)
 
     const entry: AppListItem = {
-      packageName: app.packageName,
-      appName: resolvedInfo?.appName || existingApp?.appName || app.packageName,
+      packageName: displayName,
+      appName: resolvedInfo?.appName || existingApp?.appName || displayName,
       icon: resolvedInfo?.icon || existingApp?.icon || '',
       versionName: resolvedInfo?.versionName || existingApp?.versionName || '',
       versionCode: resolvedInfo?.versionCode ?? existingApp?.versionCode ?? 0,
       installed,
       isSystem: existingApp?.isSystem ?? resolvedInfo?.isSystem ?? app.isSystem,
       configured: true,
-      pkgLower: app.packageName.toLowerCase(),
-      nameLower: (resolvedInfo?.appName || existingApp?.appName || app.packageName).toLowerCase(),
-      sortKey: buildSortKey(app.packageName, installed),
+      inherited: isInheritedConfig(displayName),
+      pkgLower: displayName.toLowerCase(),
+      nameLower: (resolvedInfo?.appName || existingApp?.appName || displayName).toLowerCase(),
+      sortKey: buildSortKey(displayName, installed),
     }
 
     const idx = result.length
     result.push(entry)
     packageIndex.set(app.packageName, idx)
+    packageIndex.set(displayName, idx)
+    instanceIndex.set(packageInstanceKey(displayName), idx)
   }
 
   return result

@@ -41,6 +41,9 @@
       </div>
     </div>
 
+    <!-- 生效范围：明示命中的配置键作用到谁（仅主应用 / 主应用+分身回退 / 仅该分身） -->
+    <p v-if="scopeText" class="scope-hint">{{ scopeText }}</p>
+
     <!-- 继承提示：分身当前只是回退命中主应用的裸包名配置，本实例尚无自有条目 -->
     <p v-if="inheritedHintVisible" class="inherited-hint">
       {{ t('apps.dialog.inherited_hint', { base: inheritedBase }) }}
@@ -109,6 +112,7 @@ import type { InstalledApp, AppConfig } from '../../types'
 import { provideDeviceFakerForm } from '../../composables/useDeviceFakerForm'
 import DeviceFakerFormFields from '../shared/DeviceFakerFormFields.vue'
 import {
+  configKeyScope,
   configWriteKey,
   filterOutOwnConfigKeys,
   findOwnConfigKey,
@@ -153,6 +157,27 @@ const templateInherited = ref(false)
 
 const inheritedBase = computed(() => parsePackageUser(props.app?.packageName || '').base)
 const inheritedHintVisible = computed(() => customInherited.value || templateInherited.value)
+
+/**
+ * 生效范围提示：把命中的配置键作用域写清楚。
+ * 继承态不显示（此时由 inheritedHint 说明「继承自主应用」，避免两句话重复）。
+ */
+const scopeText = computed(() => {
+  const key = resolvedConfigKey.value
+  if (!key || inheritedHintVisible.value) {
+    return ''
+  }
+
+  const scope = configKeyScope(key)
+  if (scope === 'user0') {
+    return t('apps.dialog.scope_user0')
+  }
+  if (scope === 'fallback') {
+    return t('apps.dialog.scope_fallback')
+  }
+
+  return t('apps.dialog.scope_clone', { uid: String(parsePackageUser(key).userId) })
+})
 
 const selectedTemplate = ref('')
 const templateSearch = ref('')
@@ -541,6 +566,12 @@ watch(selectedTemplate, (val) => {
   color: var(--text-secondary);
   background: color-mix(in srgb, var(--primary-color, #409eff) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--primary-color, #409eff) 25%, transparent);
+}
+
+.scope-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
 }
 
 .template-selector,

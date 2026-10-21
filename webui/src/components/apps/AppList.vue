@@ -46,7 +46,11 @@
           <h3 class="app-name">{{ app.appName }}</h3>
           <p class="app-package">{{ app.packageName }}</p>
           <div class="app-status-group">
-            <p v-if="app.configured" class="app-status configured">
+            <p v-if="app.configured && app.inherited" class="app-status inherited">
+              <Link :size="14" />
+              {{ t('apps.status.inherited') }}
+            </p>
+            <p v-else-if="app.configured" class="app-status configured">
               <Check :size="14" />
               {{ t('apps.status.configured') }}
             </p>
@@ -71,12 +75,12 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
-import { Smartphone, ChevronRight, Check } from '@lucide/vue'
+import { Smartphone, ChevronRight, Check, Link } from '@lucide/vue'
 import { useI18n } from '../../utils/i18n'
 import { useAppIcons } from '../../composables/useAppIcons'
 import type { InstalledApp } from '../../types'
 
-type AppListItem = InstalledApp & { configured: boolean }
+type AppListItem = InstalledApp & { configured: boolean; inherited: boolean }
 
 const props = defineProps<{
   apps: AppListItem[]
@@ -230,6 +234,11 @@ onUnmounted(() => {
 .app-status.configured {
   background: rgba(34, 197, 94, 0.1);
   color: #22c55e;
+}
+
+.app-status.inherited {
+  background: rgba(59, 130, 246, 0.12);
+  color: #3b82f6;
 }
 
 .app-status.unconfigured {
