@@ -18,9 +18,9 @@ use crate::config::{DPI_MAX, DPI_MIN};
 //
 // 前后台真值由 companion 内嵌的 UidObserver 提供（src/fg_observer.rs，
 // ActivityManager PROCESS_STATE_TOP 事件，0.5s dumpsys 轮询兜底）。Apply 只
-// 采样备份并登记未激活会话，**不急切应用任何全局态**；`FG == 包名` 才中央
-// 激活属性批量与密度，`FG != 包名` 恢复。前台源未就绪时一律不做全局变更
-// （D2 宁缺毋滥）。
+// 采样备份并登记未激活会话，**不急切应用任何全局态**；会话包出现在当前 TOP
+// **集合**里才中央激活属性批量与密度，掉出集合才恢复（多窗口/小窗下可以有多个
+// 包同时处于 TOP，不能用单槽）。前台源未就绪时一律不做全局变更（D2 宁缺毋滥）。
 
 static SESSION: Mutex<Option<Session>> = Mutex::new(None);
 
@@ -63,7 +63,7 @@ static FG_OBSERVER_STARTED: OnceLock<()> = OnceLock::new();
 fn spawn_fg_observer_once() {
     FG_OBSERVER_STARTED.get_or_init(|| {
         let sink: crate::fg_observer::FgSink =
-            std::sync::Arc::new(|pkg: &str| handle_fg_event(pkg));
+            std::sync::Arc::new(|top: &[String]| handle_fg_event(top));
         crate::fg_observer::spawn_fg_source(sink);
     });
 }
@@ -99,44 +99,59 @@ fn warn_fg_unavailable() {
 
 // ── 中央状态机：FG 事件驱动激活/恢复 ────────────────────────────────────────
 //
-// | 条件                                    | 动作                             |
-// |-----------------------------------------|----------------------------------|
-// | 死会话（kill 0 失败）且未激活             | 清空（搭车式惰性回收，D5）        |
-// | FG == 包名 && !activated                 | 应用 props 批量 + density，激活   |
-// | FG == 包名 && activated                  | 幂等跳过                          |
-// | FG != 包名 && activated                  | 恢复 props + density，失活        |
-// | FG == "-"（过渡态）                      | 保持现状（宁可晚不错）            |
-// | 其它                                     | 无操作                            |
+// 前台真值是**包名集合**（多窗口/小窗/分屏下可同时多个 TOP），见
+// `src/fg_observer.rs` 的 `CURRENT_TOP`。
+//
+// | 条件                          | 动作                             |
+// |-------------------------------|----------------------------------|
+// | 会话进程已死（kill 0 失败）     | 未激活→清空；已激活→先恢复再清空  |
+// | 集合为空（`-` 过渡态）          | 保持现状（宁可晚不错）            |
+// | 集合含会话包 && !activated      | 应用 props 批量 + density，激活   |
+// | 集合含会话包 && activated       | 幂等跳过                          |
+// | 集合不含会话包 && activated     | 恢复 props + density，失活        |
+// | 其它                           | 无操作                            |
+//
+// 关键：**只有「集合不含会话包」才失活**。旧实现把前台当单槽，于是「另一个 app
+// 也进 TOP」（切小窗 / 分屏 / 浮窗）被误判成本 app 失活，整批全局属性被 restore，
+// 而目标 app 仍在跑自己的检测——它读到的就是真值（Build 是 JVM hook，仍是伪装值
+// ⇒ 三源不一致）。
 
-fn handle_fg_event(pkg: &str) {
+fn handle_fg_event(top: &[String]) {
     let mut guard = SESSION.lock().unwrap();
 
-    // 惰性回收：死且未激活的会话直接清空；激活中的等焦点移交触发的失活收敛。
-    if let Some(sess) = guard.as_ref()
-        && unsafe { libc::kill(sess.app_pid as i32, 0) } != 0
-        && !sess.activated
-    {
-        info!(
-            "Reaping dead session '{}' (pid {})",
-            sess.package, sess.app_pid
-        );
-        *guard = None;
+    // 惰性回收（D5 搭车式）：进程已死则收敛——未激活直接丢弃；已激活先恢复，
+    // 否则伪装值会永久留在全局（没有任何进程再等焦点移交）。
+    let dead_session = guard.as_ref().and_then(|sess| {
+        (unsafe { libc::kill(sess.app_pid as i32, 0) } != 0)
+            .then(|| (sess.package.clone(), sess.app_pid, sess.activated))
+    });
+    if let Some((package, pid, activated)) = dead_session {
+        if activated {
+            let mut taken = guard.take().expect("session present");
+            info!("FG reap: session '{package}' process (pid {pid}) is gone; restoring props");
+            deactivate_session(&mut taken, "-");
+        } else {
+            info!("Reaping dead session '{package}' (pid {pid})");
+            *guard = None;
+        }
     }
 
-    if pkg == "-" {
+    if top.is_empty() {
+        // 过渡态/未知：保持现状，等下一次真正的 TOP 事件。
         return;
     }
 
     let Some(sess) = guard.as_mut() else {
         return;
     };
-    if pkg == sess.package {
+    if top.iter().any(|p| p == &sess.package) {
         if !sess.activated {
             activate_session(sess);
         }
     } else if sess.activated {
         let mut taken = guard.take().expect("session present");
-        deactivate_session(&mut taken, pkg);
+        let label = top.join(",");
+        deactivate_session(&mut taken, &label);
         *guard = Some(taken);
     }
 }
@@ -362,6 +377,13 @@ fn rebuild_all_contexts(keys_iter: impl Iterator<Item = impl AsRef<str>>) {
     }
 }
 
+/// 版本 banner 去重：每个 companion 进程只打一条。
+///
+/// companion 在开机后由首个配置应用惰性拉起、常驻到下次重启，因此「每个
+/// companion 进程一次」≈「每次开机一条」。不能放在 `pre_app_specialize`：那是
+/// 每个 app 进程各跑一遍，一个应用（尤其多进程应用）会把 banner 刷成几十行。
+static BUILD_BANNER_LOGGED: OnceLock<()> = OnceLock::new();
+
 /// 同步 companion 日志级别：debug=true 保持 Debug（保留 fg_observer/会话等观察性日志），
 /// debug=false → Off（完全不写日志）。fork 出来的 CPU spoof 子进程会继承该级别，
 /// 因此调用点必须在 fork 之前。
@@ -371,6 +393,14 @@ pub(crate) fn sync_log_level(debug: bool) {
     } else {
         LevelFilter::Off
     });
+
+    // 日志刚被打开的这一刻打版本 banner（真机排障第一现场：此前日志里没有任何
+    // 版本信息，「用户装的是哪个构建」只能靠日志形态反推）。
+    if debug {
+        BUILD_BANNER_LOGGED.get_or_init(|| {
+            info!("device_faker {}", crate::build_ident());
+        });
+    }
 }
 
 /// Apply 请求处理器：只采样备份 + 登记未激活会话（D1），
@@ -534,11 +564,9 @@ fn apply_resetprop_session(
     drop(guard);
 
     // 关闭竞态：焦点早已在本包（事件先于 Apply 到达 / 热重载重登记），立即激活。
-    let fg = crate::fg_observer::current_fg();
-    if let Some(fg) = fg
-        && fg == request.package_name
-    {
-        handle_fg_event(&fg);
+    let top = crate::fg_observer::current_top();
+    if top.iter().any(|p| p == &request.package_name) {
+        handle_fg_event(&top);
     }
 
     Ok(backups_for_response)

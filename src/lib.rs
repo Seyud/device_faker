@@ -30,6 +30,58 @@ use zygisk_api::{
 
 const CONFIG_PATH: &str = "/data/adb/device_faker/config/config.toml";
 
+/// 版本 banner 用的构建标识：`v1.6.0 (16e269f, built 2026-10-31 04:28:53 +08:00)`。
+///
+/// - `DF_GIT_HASH` / `DF_BUILD_EPOCH` 由 `build.rs` 在编译期注入（工作区脏会带 `-dirty`）；
+/// - 时间按**设备本地时区**渲染并附 UTC 偏移——真机上排查「时钟/时区」相关问题时，
+///   能一眼看出这份日志是哪个构建、在什么本地时间编出来的；
+/// - 用 `localtime_r` 而不是引 `chrono`：这里只需要一个时间点，不值得为它加依赖。
+pub(crate) fn build_ident() -> String {
+    let version = env!("CARGO_PKG_VERSION");
+    let hash = option_env!("DF_GIT_HASH").unwrap_or("unknown");
+    let built = option_env!("DF_BUILD_EPOCH")
+        .and_then(format_epoch_local)
+        .unwrap_or_else(|| "unknown".to_string());
+
+    format!("v{version} ({hash}, built {built})")
+}
+
+/// epoch 秒 → 设备本地时间字符串（`YYYY-MM-DD HH:MM:SS ±HH:MM`），失败返回 `None`。
+#[cfg(any(target_os = "android", target_os = "linux"))]
+fn format_epoch_local(epoch: &str) -> Option<String> {
+    let secs = epoch.trim().parse::<libc::time_t>().ok()?;
+
+    // SAFETY: `tm` 全零对 libc 是合法输入，`localtime_r` 会覆盖它；返回值非空即写入成功。
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    let result = unsafe { libc::localtime_r(&secs, &mut tm) };
+    if result.is_null() {
+        return None;
+    }
+
+    let offset = tm.tm_gmtoff;
+    let sign = if offset < 0 { '-' } else { '+' };
+    let offset_secs = offset.abs();
+
+    Some(format!(
+        "{:04}-{:02}-{:02} {:02}:{:02}:{:02} {}{:02}:{:02}",
+        tm.tm_year + 1900,
+        tm.tm_mon + 1,
+        tm.tm_mday,
+        tm.tm_hour,
+        tm.tm_min,
+        tm.tm_sec,
+        sign,
+        offset_secs / 3600,
+        (offset_secs % 3600) / 60,
+    ))
+}
+
+/// 非 android/linux 目标（本地 `cargo check` 主机侧）不做本地时间格式化。
+#[cfg(not(any(target_os = "android", target_os = "linux")))]
+fn format_epoch_local(_epoch: &str) -> Option<String> {
+    None
+}
+
 #[derive(Default)]
 struct MyModule;
 

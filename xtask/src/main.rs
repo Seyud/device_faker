@@ -6,7 +6,7 @@ use std::{
     process::{self, Command},
 };
 
-use anyhow::Result;
+use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use fs_extra::{dir, file};
 use time::{OffsetDateTime, UtcOffset};
@@ -97,6 +97,23 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+/// 跑外部命令并在**非零退出码**时直接失败。
+///
+/// `Command::spawn()?.wait()?` 只能发现「进程起不来」；命令自己跑挂了（退出码非 0）
+/// 会被静默忽略。2026-10-30 的 CI（run 41123564715）就是这样：`cargo ndk build` 因
+/// `error[E0425]: cannot find function build_ident` 失败，退出码被丢掉，23 秒后才在
+/// `file::copy(...).unwrap()` 处 panic——日志里只剩那句 unwrap，真正的 rustc 报错被
+/// 埋在几十行 vite 输出之前，很容易误判成环境问题。
+fn run_command(command: &mut Command, what: &str) -> Result<()> {
+    let status = command
+        .status()
+        .with_context(|| format!("failed to spawn {what}"))?;
+    if !status.success() {
+        bail!("{what} failed ({status})");
+    }
+    Ok(())
+}
+
 fn build(release: bool, verbose: bool) -> Result<()> {
     let temp_dir = temp_dir(release);
 
@@ -114,8 +131,11 @@ fn build(release: bool, verbose: bool) -> Result<()> {
         cargo.arg("--verbose");
     }
 
-    cargo.spawn()?.wait()?;
-    cargo.current_dir("device_faker_cli/").spawn()?.wait()?;
+    run_command(&mut cargo, "cargo ndk build")?;
+    run_command(
+        cargo.current_dir("device_faker_cli/"),
+        "cargo build (device_faker_cli)",
+    )?;
 
     // Build WebUI first so that module/webroot/ exists before copying
     build_webui()?;
@@ -126,14 +146,23 @@ fn build(release: bool, verbose: bool) -> Result<()> {
         &temp_dir,
         &dir::CopyOptions::new().overwrite(true).content_only(true),
     )
-    .unwrap();
-    fs::remove_file(temp_dir.join(".gitignore")).unwrap();
+    .with_context(|| format!("failed to copy {} into build dir", module_dir.display()))?;
+    if temp_dir.join(".gitignore").exists() {
+        fs::remove_file(temp_dir.join(".gitignore")).context("failed to drop .gitignore")?;
+    }
+    let so_source = bin_path(release);
+    if !so_source.exists() {
+        bail!(
+            "{} was not produced by the build (see the build output above)",
+            so_source.display()
+        );
+    }
     file::copy(
-        bin_path(release),
+        &so_source,
         temp_dir.join("zygisk/arm64-v8a.so"),
         &file::CopyOptions::new().overwrite(true),
     )
-    .unwrap();
+    .context("failed to stage zygisk/arm64-v8a.so")?;
     file::copy(
         cli_bin_path(release),
         temp_dir.join("bin/device_faker_cli"),
@@ -195,7 +224,7 @@ fn check(release: bool, verbose: bool) -> Result<()> {
         cargo.arg("--verbose");
     }
 
-    cargo.spawn()?.wait()?;
+    run_command(&mut cargo, "cargo ndk check")?;
 
     Ok(())
 }
@@ -204,7 +233,7 @@ fn clean() -> Result<()> {
     let temp_dir = temp_dir(false);
     let _ = fs::remove_dir_all(&temp_dir);
 
-    Command::new("cargo").arg("clean").spawn()?.wait()?;
+    run_command(Command::new("cargo").arg("clean"), "cargo clean")?;
 
     Ok(())
 }
@@ -215,7 +244,7 @@ fn format(verbose: bool) -> Result<()> {
     if verbose {
         command.arg("--verbose");
     }
-    command.spawn()?.wait()?;
+    run_command(&mut command, "cargo fmt")?;
 
     Ok(())
 }
@@ -231,22 +260,26 @@ fn lint(fix: bool) -> Result<()> {
         command
     };
 
-    command_builder(fix).spawn()?.wait()?;
-    command_builder(fix).arg("--release").spawn()?.wait()?;
+    run_command(&mut command_builder(fix), "cargo clippy")?;
+    run_command(
+        command_builder(fix).arg("--release"),
+        "cargo clippy --release",
+    )?;
 
     Ok(())
 }
 
 fn update() -> Result<()> {
-    Command::new("cargo")
-        .args(["update", "--recursive"])
-        .spawn()?
-        .wait()?;
-    Command::new("cargo")
-        .current_dir("xtask")
-        .args(["update", "--recursive"])
-        .spawn()?
-        .wait()?;
+    run_command(
+        Command::new("cargo").args(["update", "--recursive"]),
+        "cargo update",
+    )?;
+    run_command(
+        Command::new("cargo")
+            .current_dir("xtask")
+            .args(["update", "--recursive"]),
+        "cargo update (xtask)",
+    )?;
 
     Ok(())
 }
@@ -291,8 +324,8 @@ fn build_webui() -> Result<()> {
         command
     };
 
-    npm().arg("install").spawn()?.wait()?;
-    npm().args(["run", "build"]).spawn()?.wait()?;
+    run_command(npm().arg("install"), "npm install")?;
+    run_command(npm().args(["run", "build"]), "npm run build")?;
 
     Ok(())
 }

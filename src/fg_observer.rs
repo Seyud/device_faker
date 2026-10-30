@@ -24,7 +24,7 @@
 //! 失败兜底：无法注册（无 binder/服务不可用）→ 0.5s `dumpsys window` 轮询
 //! 解析 mCurrentFocus/mFocusedApp。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -41,12 +41,20 @@ use self::android::app::IUidObserver::{BnUidObserver, IUidObserver};
 /// 前台源是否就绪（observer 注册成功，或轮询兜底已接管）。
 pub static FG_READY: AtomicBool = AtomicBool::new(false);
 
-/// 当前 TOP 包名（observer/轮询维护），供 Apply 关闭"事件先于 Apply"竞态。
-static CURRENT_FG: Mutex<Option<String>> = Mutex::new(None);
+/// 当前处于 TOP 的包名**集合**（observer/轮询维护），供 Apply 关闭"事件先于
+/// Apply"竞态。
+///
+/// 必须是集合而不是单值：多窗口/小窗/分屏下多个 uid 可以同时处于
+/// `PROCESS_STATE_TOP`（Android 的 TOP 语义是「进程承载某个 task 的栈顶 Activity
+/// 且该 task 可见」，多窗口下每个可见 task 的栈顶都算）。单槽实现会把「另一个
+/// app 也进 TOP」误判成本 app 失活，于是 companion 把整批全局属性 restore——用户
+/// 中途切一次小窗，目标 app 立刻掉回真值，检测侧就是
+/// 「Build 仍是伪装值 / Java+Native 全是真值」的三源不一致。
+static CURRENT_TOP: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
-/// 返回当前 TOP 包名（未知/过渡态为 None）。
-pub fn current_fg() -> Option<String> {
-    CURRENT_FG.lock().unwrap().clone()
+/// 返回当前 TOP 包名集合的副本（空 = 过渡/未知）。
+pub fn current_top() -> Vec<String> {
+    CURRENT_TOP.lock().unwrap().clone()
 }
 
 /// AMS 进程状态：前台（top resumed activity 所在进程）。
@@ -59,9 +67,9 @@ const PACKAGES_LIST: &str = "/data/system/packages.list";
 /// 兜底轮询周期。
 const POLL_INTERVAL: Duration = Duration::from_millis(500);
 
-/// 前台变化回调：pkg = 当前前台包名（`-` 表示过渡/未知）。
+/// 前台变化回调：入参 = 当前 TOP 包名集合（空切片 = 过渡/未知）。
 /// 用 Arc 包裹以便注册失败后轮询兜底复用同一闭包。
-pub type FgSink = Arc<dyn Fn(&str) + Send + Sync>;
+pub type FgSink = Arc<dyn Fn(&[String]) + Send + Sync>;
 
 /// UidObserver 回调状态。
 pub struct UidObserverState {
@@ -69,47 +77,70 @@ pub struct UidObserverState {
     /// 注册时快照可能过期（新装/更新 app 不在快照内）：
     /// 查询 miss 时重读 packages.list 定向刷新，保证"即装即测"不被前台门控漏判。
     uid_to_pkg: Mutex<HashMap<i32, String>>,
-    /// 当前处于 TOP 的 uid（全局同时至多一个）。
-    top_uid: Mutex<Option<i32>>,
+    /// 当前处于 TOP 的 uid 集合（多窗口/小窗下可同时有多个）。
+    top_uids: Mutex<HashSet<i32>>,
     sink: FgSink,
 }
 
 impl rsbinder::Interface for UidObserverState {}
 
 impl UidObserverState {
+    /// 维护 TOP uid 集合，并把「包名集合」发布给 companion。
+    ///
+    /// 发布语义：
+    /// - 集合非空 ⇒ 这些包当前都处于 TOP（多窗口下可能不止一个）；
+    /// - 集合为空 ⇒ 过渡/未知，companion 保持现状（宁可晚不错，D1）；
+    /// - 只有「会话包不在集合里」时 companion 才 restore。
     fn on_top_change(&self, uid: i32, is_top: bool) {
-        let mut top = self.top_uid.lock().unwrap();
-        if is_top {
-            if *top == Some(uid) {
-                return; // 幂等
-            }
-            *top = Some(uid);
-            // 查 uid → 包名；miss 表示新装/更新包不在注册快照内，重读 packages.list 刷新。
-            let pkg = {
-                let mut map = self.uid_to_pkg.lock().unwrap();
-                match map.get(&uid) {
-                    Some(p) => p.clone(),
-                    None => {
-                        if let Ok(fresh) = read_packages_list() {
-                            *map = fresh;
-                        }
-                        map.get(&uid).cloned().unwrap_or_else(|| "-".to_string())
-                    }
-                }
+        // ① 更新 TOP 集合（幂等：状态没变就什么都不发布）。
+        let uids: Vec<i32> = {
+            let mut top = self.top_uids.lock().unwrap();
+            let changed = if is_top {
+                top.insert(uid)
+            } else {
+                top.remove(&uid)
             };
-            info!("fg observer: uid {uid} entered TOP -> {pkg}");
-            drop(top);
-            *CURRENT_FG.lock().unwrap() = Some(pkg.clone());
-            (self.sink)(&pkg);
-        } else if *top == Some(uid) {
-            // 当前 TOP uid 离开 → 过渡态
-            *top = None;
-            info!("fg observer: uid {uid} left TOP -> -");
-            drop(top);
-            *CURRENT_FG.lock().unwrap() = None;
-            (self.sink)("-");
+            if !changed {
+                return;
+            }
+            top.iter().copied().collect()
+        };
+
+        // ② 解析成包名集合（miss 时重读 packages.list 定向刷新）。
+        let (changed_pkg, pkgs) = {
+            let mut map = self.uid_to_pkg.lock().unwrap();
+            let changed_pkg = pkg_for_uid(&mut map, uid).unwrap_or_else(|| "-".to_string());
+            let mut pkgs: Vec<String> = Vec::with_capacity(uids.len());
+            for u in uids {
+                if let Some(p) = pkg_for_uid(&mut map, u)
+                    && !pkgs.contains(&p)
+                {
+                    pkgs.push(p);
+                }
+            }
+            (changed_pkg, pkgs)
+        };
+
+        // ③ 先落基线、再喂 companion（Apply 用 current_top() 关掉竞态）。
+        if is_top {
+            info!("fg observer: uid {uid} entered TOP -> {changed_pkg} (top={pkgs:?})");
+        } else {
+            info!("fg observer: uid {uid} left TOP -> {changed_pkg} (top={pkgs:?})");
         }
+        *CURRENT_TOP.lock().unwrap() = pkgs.clone();
+        (self.sink)(&pkgs);
     }
+}
+
+/// uid → 包名；miss 时重读 `/data/system/packages.list` 后重试。
+fn pkg_for_uid(map: &mut HashMap<i32, String>, uid: i32) -> Option<String> {
+    if let Some(p) = map.get(&uid) {
+        return Some(p.clone());
+    }
+    if let Ok(fresh) = read_packages_list() {
+        *map = fresh;
+    }
+    map.get(&uid).cloned()
 }
 
 impl IUidObserver for UidObserverState {
@@ -181,7 +212,7 @@ fn register_observer(sink: FgSink) -> anyhow::Result<()> {
 
     let state = UidObserverState {
         uid_to_pkg: Mutex::new(uid_to_pkg),
-        top_uid: Mutex::new(None),
+        top_uids: Mutex::new(HashSet::new()),
         sink,
     };
     let observer: Strong<dyn IUidObserver> = BnUidObserver::new_binder(state);
@@ -226,6 +257,7 @@ fn read_packages_list() -> anyhow::Result<HashMap<i32, String>> {
 
 /// 兜底：0.5s `dumpsys window` 轮询解析 mCurrentFocus/mFocusedApp。
 /// 只在变化时调用 sink（避免无效 churn）。
+/// 轮询只有单焦点信息，非 `-` 时视作单元素 TOP 集合。
 fn poll_loop(sink: FgSink) {
     FG_READY.store(true, Ordering::Release);
     info!("foreground fallback: 0.5s dumpsys window poll");
@@ -234,13 +266,14 @@ fn poll_loop(sink: FgSink) {
         let focus = exec_dumpsys_focus();
         if focus != last {
             last = focus.clone();
-            *CURRENT_FG.lock().unwrap() = if focus == "-" {
-                None
+            let pkgs: Vec<String> = if focus == "-" {
+                Vec::new()
             } else {
-                Some(focus.clone())
+                vec![focus.clone()]
             };
+            *CURRENT_TOP.lock().unwrap() = pkgs.clone();
             info!("fg poll focus -> {focus}");
-            (sink)(&focus);
+            (sink)(&pkgs);
         }
         std::thread::sleep(POLL_INTERVAL);
     }
