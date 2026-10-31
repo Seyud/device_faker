@@ -1,13 +1,7 @@
 import { parse as parseToml, stringify as stringifyToml } from 'smol-toml'
 import { sanitizeConfigForSave, sanitizeTemplate } from './config'
-import { execCommand } from './ksu'
 import type { Template } from '../types'
 
-const CLI_PATH_CANDIDATES = [
-  '/data/adb/modules/device_faker/bin/device_faker_cli',
-  '/data/adb/device_faker/bin/device_faker_cli',
-]
-const MAX_CHUNK_SIZE = 96 * 1024
 const TEMPLATE_SIGNAL_KEYS = [
   'manufacturer',
   'brand',
@@ -26,8 +20,6 @@ const TEMPLATE_SIGNAL_KEYS = [
   'sdk_int',
   'custom_props',
 ]
-
-let cliPathLoader: Promise<string> | null = null
 
 type UnknownRecord = Record<string, unknown>
 
@@ -57,97 +49,6 @@ function collectTemplates(source: UnknownRecord): Record<string, Template> {
 
     return result
   }, {})
-}
-
-function fileToBase64(chunk: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = reader.result as string
-      resolve(result.split(',')[1] || '')
-    }
-    reader.onerror = (err) => reject(err)
-    reader.readAsDataURL(chunk)
-  })
-}
-
-export function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, "'\\''")}'`
-}
-
-export async function resolveCliPath() {
-  if (!cliPathLoader) {
-    cliPathLoader = (async () => {
-      for (const path of CLI_PATH_CANDIDATES) {
-        try {
-          await execCommand(`test -x ${shellQuote(path)}`)
-          return path
-        } catch {
-          // try next candidate
-        }
-      }
-
-      return CLI_PATH_CANDIDATES[0]
-    })()
-  }
-
-  return cliPathLoader
-}
-
-export function createDeviceTempPath(prefix: string, extension: string) {
-  const normalizedPrefix = prefix.replace(/[^a-zA-Z0-9_-]/g, '_')
-  const normalizedExtension = extension.startsWith('.') ? extension : `.${extension}`
-  return `/data/local/tmp/${normalizedPrefix}_${Date.now()}${normalizedExtension}`
-}
-
-export async function uploadFileToDevice(file: File, targetPath: string) {
-  const dirEnd = targetPath.lastIndexOf('/')
-  const targetDir = dirEnd > 0 ? targetPath.slice(0, dirEnd) : '/data/local/tmp'
-  await execCommand(`mkdir -p ${shellQuote(targetDir)}`)
-
-  const chunkSize =
-    file.size > MAX_CHUNK_SIZE * 4
-      ? MAX_CHUNK_SIZE
-      : Math.max(4096, Math.ceil((file.size || 1) / 4))
-  const totalChunks = Math.ceil((file.size || 1) / chunkSize)
-
-  try {
-    for (let index = 0; index < totalChunks; index++) {
-      const start = index * chunkSize
-      const end = Math.min(start + chunkSize, file.size)
-      const chunk = file.slice(start, end)
-      const base64 = await fileToBase64(chunk)
-      const partPath = `${targetPath}.part${index.toString().padStart(8, '0')}`
-      await execCommand(`echo ${shellQuote(base64)} | base64 -d > ${shellQuote(partPath)}`)
-    }
-
-    await execCommand(
-      `cat ${shellQuote(targetPath)}.part* > ${shellQuote(targetPath)} && rm -f ${shellQuote(targetPath)}.part*`
-    )
-  } catch (error) {
-    await execCommand(`rm -f ${shellQuote(targetPath)} ${shellQuote(targetPath)}.part*`).catch(
-      () => {}
-    )
-    throw error
-  }
-}
-
-async function runCliCommand(args: string[]) {
-  const cliPath = await resolveCliPath()
-  const command = [shellQuote(cliPath), ...args].join(' ')
-  return execCommand(command)
-}
-
-export async function convertZipOnDevice(zipPath: string, outputPath: string) {
-  await runCliCommand(['convert', '-i', shellQuote(zipPath), '-o', shellQuote(outputPath)])
-}
-
-export async function convertPropsFileOnDevice(propsPath: string, outputPath: string) {
-  await runCliCommand(['convert-props', '-i', shellQuote(propsPath), '-o', shellQuote(outputPath)])
-}
-
-export async function dumpCurrentDeviceToToml(outputPath: string) {
-  await runCliCommand(['dump-device', '-o', shellQuote(outputPath)])
 }
 
 export function parseTemplatesFromToml(content: string): Record<string, Template> {

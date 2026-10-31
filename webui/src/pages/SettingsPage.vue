@@ -120,17 +120,12 @@ import { ref, watch, computed, onActivated } from 'vue'
 import { Moon, Globe, Bug, FileUp } from '@lucide/vue'
 import { useConfigStore } from '../stores/config'
 import { useSettingsStore } from '../stores/settings'
-import { execCommand, readFile } from '../utils/ksu'
 import { useI18n } from '../utils/i18n'
 import { toast } from 'kernelsu-alt'
 import type { Template } from '../types'
-import {
-  convertZipOnDevice,
-  createDeviceTempPath,
-  parseFirstTemplateFromToml,
-  shellQuote,
-  uploadFileToDevice,
-} from '../utils/templateTransfer'
+import { parseFirstTemplateFromToml } from '../utils/templateTransfer'
+import { readZipEntries } from '../utils/zipReader'
+import { convertZipEntriesToTemplate } from '../utils/propsToTemplate'
 
 const configStore = useConfigStore()
 const settingsStore = useSettingsStore()
@@ -210,23 +205,14 @@ async function startConversion() {
   }
 
   converting.value = true
-  const tempZipPath = createDeviceTempPath('device_faker_convert', '.zip')
-  const tempOutputPath = createDeviceTempPath('device_faker_convert', '.toml')
 
   try {
-    await uploadFileToDevice(file, tempZipPath)
-    await convertZipOnDevice(tempZipPath, tempOutputPath)
-
-    const outputContent = await readFile(tempOutputPath)
-    if (!outputContent) {
-      toast(t('settings.messages.read_failed'))
-      return
-    }
-
-    const { templateData, defaultName } = parseFirstTemplateFromToml(outputContent)
-    convertedTemplate.value = templateData
-    convertedTemplateName.value = defaultName
-    convertedContent.value = outputContent
+    // ZIP 在 WebView 内直接解析：不落盘、不 fork CLI、不依赖 manager 版本
+    const entries = await readZipEntries(await file.arrayBuffer())
+    const { name, template, toml } = convertZipEntriesToTemplate(entries)
+    convertedTemplate.value = template
+    convertedTemplateName.value = name
+    convertedContent.value = toml
     convertDialogVisible.value = true
   } catch (err) {
     toast(
@@ -235,9 +221,6 @@ async function startConversion() {
     console.error(err)
   } finally {
     converting.value = false
-    await execCommand(`rm -f ${shellQuote(tempZipPath)} ${shellQuote(tempOutputPath)}`).catch(
-      () => {}
-    )
   }
 }
 

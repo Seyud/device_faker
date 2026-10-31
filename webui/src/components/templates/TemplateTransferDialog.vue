@@ -197,16 +197,14 @@ import { toast } from 'kernelsu-alt'
 import { useConfigStore } from '../../stores/config'
 import { useI18n } from '../../utils/i18n'
 import { useLazyMessageBox } from '../../utils/elementPlus'
-import { execCommand, readFile } from '../../utils/ksu'
+import { execCommand } from '../../utils/ksu'
 import {
   copyTextToClipboard,
-  createDeviceTempPath,
-  dumpCurrentDeviceToToml,
   parseFirstTemplateFromToml,
   parseTemplatesFromToml,
-  shellQuote,
   stringifyTemplatesToToml,
 } from '../../utils/templateTransfer'
+import { convertPropertyTextToTemplate } from '../../utils/propsToTemplate'
 import type { Template } from '../../types'
 
 type TransferTab = 'import' | 'export' | 'device'
@@ -417,24 +415,23 @@ async function loadCurrentDevice() {
   }
 
   deviceLoading.value = true
-  const tempOutputPath = createDeviceTempPath('device_faker_dump_device', '.toml')
 
   try {
-    let outputContent = ''
+    let templateData: Template
+    let defaultName: string
 
     if (import.meta.env?.DEV) {
       const { mockConfig } = await import('../../utils/mockData')
-      outputContent = mockConfig
+      ;({ templateData, defaultName } = parseFirstTemplateFromToml(mockConfig))
     } else {
-      await dumpCurrentDeviceToToml(tempOutputPath)
-      outputContent = await readFile(tempOutputPath)
+      // 直接读 getprop 输出在前端转换：不再需要临时文件与 device_faker_cli
+      const output = await execCommand('getprop')
+      if (!output.trim()) {
+        throw new Error(t('settings.messages.read_failed'))
+      }
+      ;({ template: templateData, name: defaultName } = convertPropertyTextToTemplate(output))
     }
 
-    if (!outputContent.trim()) {
-      throw new Error(t('settings.messages.read_failed'))
-    }
-
-    const { templateData, defaultName } = parseFirstTemplateFromToml(outputContent)
     deviceTemplate.value = templateData
     deviceTemplateName.value = defaultName
     toast(t('templates.transfer.device.read_success'))
@@ -443,7 +440,6 @@ async function loadCurrentDevice() {
     toast(`${t('templates.transfer.device.read_failed')}: ${message}`)
   } finally {
     deviceLoading.value = false
-    await execCommand(`rm -f ${shellQuote(tempOutputPath)}`).catch(() => {})
   }
 }
 

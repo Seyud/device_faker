@@ -1,3 +1,11 @@
+//! device_faker_cli —— 开发/排障用的命令行工具（`convert` / `convert-props` / `dump-device`）。
+//!
+//! TODO(remove-cli): 自 2026-10-31 起**不再随模块打包**（`xtask` 不再拷贝、`customize.sh`
+//! 不再 set_perm），因为 WebUI 的「ZIP / 属性文本 → 机型模板」转换已改成纯前端实现
+//! （`webui/src/utils/propsToTemplate.ts` + `zipReader.ts`，A/B 与 CLI 输出逐字节一致）。
+//! 保留本 crate 只是给开发者手动使用；若确认没人再从 adb shell 跑它，可以整体删除
+//! （连带 `xtask` 的 TODO 注释、AGENTS.md 的 CLI 段落、`Cargo.toml` 的 exclude 条目）。
+
 use anyhow::Result;
 use argh::FromArgs;
 

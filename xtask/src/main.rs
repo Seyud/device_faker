@@ -132,10 +132,10 @@ fn build(release: bool, verbose: bool) -> Result<()> {
     }
 
     run_command(&mut cargo, "cargo ndk build")?;
-    run_command(
-        cargo.current_dir("device_faker_cli/"),
-        "cargo build (device_faker_cli)",
-    )?;
+    // TODO(remove-cli): device_faker_cli 已不随模块打包（WebUI 的「ZIP/属性 → 模板」转换
+    // 已在 utils/propsToTemplate.ts 纯前端实现，模块运行期也不需要它）。仍保留 crate 作为
+    // 开发/排障用的命令行工具（`cargo run -p device_faker_cli -- ...`）。若确认无人再用，
+    // 可整 crate 删除并一并清掉本文件的 cli_bin_path()、AGENTS.md 的 CLI 说明。
 
     // Build WebUI first so that module/webroot/ exists before copying
     build_webui()?;
@@ -163,13 +163,6 @@ fn build(release: bool, verbose: bool) -> Result<()> {
         &file::CopyOptions::new().overwrite(true),
     )
     .context("failed to stage zygisk/arm64-v8a.so")?;
-    file::copy(
-        cli_bin_path(release),
-        temp_dir.join("bin/device_faker_cli"),
-        &file::CopyOptions::new().overwrite(true),
-    )
-    .unwrap();
-
     let build_type = if release { "release" } else { "debug" };
     let package_path = Path::new("output").join(format!("device_faker-({build_type}).zip"));
 
@@ -299,13 +292,6 @@ fn bin_path(release: bool) -> PathBuf {
         .join("aarch64-linux-android")
         .join(if release { "release" } else { "debug" })
         .join("libzygisk.so")
-}
-
-fn cli_bin_path(release: bool) -> PathBuf {
-    Path::new("device_faker_cli/target")
-        .join("aarch64-linux-android")
-        .join(if release { "release" } else { "debug" })
-        .join("device_faker_cli")
 }
 
 fn cargo_ndk() -> Command {

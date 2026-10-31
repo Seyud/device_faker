@@ -96,7 +96,8 @@ tr_print "- 修改配置后无需重启，仅需重启对应应用" "- No reboot
 
 set_perm_recursive "$MODPATH" 0 0 0755 0644
 set_perm_recursive "$MODPATH/zygisk" 0 0 0755 0644
-set_perm $MODPATH/bin/device_faker_cli 0 0 0755
+# TODO(remove-cli): device_faker_cli 已不随模块打包（WebUI 转换已纯前端实现）。
+# 若确认无人再手动使用，可连同 device_faker_cli/ crate 一起删除。
 
 tr_print "- 安装完成！" "- Installation complete!"
 tr_print "- 重启设备后生效" "- Reboot device to take effect"
