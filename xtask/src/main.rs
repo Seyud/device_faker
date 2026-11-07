@@ -141,6 +141,7 @@ fn build(release: bool, verbose: bool) -> Result<()> {
     build_webui()?;
 
     let module_dir = module_dir();
+    check_module_scripts_lf(&module_dir)?;
     dir::copy(
         &module_dir,
         &temp_dir,
@@ -274,6 +275,35 @@ fn update() -> Result<()> {
         "cargo update (xtask)",
     )?;
 
+    Ok(())
+}
+
+/// `.gitattributes` 的 `text eol=lf` 只在 git checkout / add 时生效；`xtask` 直接读工作区
+/// 打包，被编辑器或脚本写成 CRLF 的 `*.sh` 会原样进 zip，导致安装器 ash 解析失败
+fn check_module_scripts_lf(module_dir: &Path) -> Result<()> {
+    fn collect(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
+        for entry in fs::read_dir(dir)? {
+            let path = entry?.path();
+            if path.is_dir() {
+                collect(&path, out)?;
+            } else if path.extension().and_then(|ext| ext.to_str()) == Some("sh") {
+                out.push(path);
+            }
+        }
+        Ok(())
+    }
+
+    let mut scripts = Vec::new();
+    collect(module_dir, &mut scripts)?;
+    for script in scripts {
+        let bytes = fs::read(&script)?;
+        if bytes.windows(2).any(|window| window == b"\x0d\x0a") {
+            bail!(
+                "{} has CRLF line endings; module scripts must use LF (see .gitattributes)",
+                script.display()
+            );
+        }
+    }
     Ok(())
 }
 

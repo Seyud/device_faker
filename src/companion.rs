@@ -276,6 +276,10 @@ pub fn handle_companion_request(stream: &mut UnixStream) {
     #[cfg(target_os = "android")]
     crate::file_logger::init();
 
+    // 配置热更新：inotify 监听 config.toml，变更时重渲染内存里的 per-package spec。
+    crate::spec::ensure_watcher();
+    crate::spec::maybe_render();
+
     let request = match read_companion_request(stream) {
         Ok(request) => request,
         Err(err) => {
@@ -309,6 +313,18 @@ pub fn handle_companion_request(stream: &mut UnixStream) {
                     CompanionResponse::err(err.to_string())
                 }
             };
+            if let Err(e) = write_companion_response(stream, &response) {
+                warn!("Failed to write companion response: {e}");
+            }
+        }
+        CompanionRequest::Ping => {
+            if let Err(e) = write_companion_response(stream, &CompanionResponse::ok()) {
+                warn!("Failed to write companion response: {e}");
+            }
+        }
+        CompanionRequest::GetSpec(request) => {
+            let mut response = CompanionResponse::ok();
+            response.spec = crate::spec::lookup_first(&request.keys);
             if let Err(e) = write_companion_response(stream, &response) {
                 warn!("Failed to write companion response: {e}");
             }
@@ -842,6 +858,11 @@ pub(crate) struct ResetpropSessionRequest {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct SpecRequest {
+    pub keys: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct RestoreRequest {
     props: HashMap<String, String>,
 }
@@ -849,6 +870,10 @@ pub(crate) struct RestoreRequest {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "cmd", content = "payload")]
 pub enum CompanionRequest {
+    /// 空请求：仅用于尽早拉起 companion（触发 spec 预渲染）。
+    Ping,
+    /// 取某个包的预渲染 TOML（按顺序尝试多个键：pkg@uid → pkg）。
+    GetSpec(SpecRequest),
     Apply(ResetpropSessionRequest),
     Restore(RestoreRequest),
     WriteLog(WriteLogRequest),
@@ -859,6 +884,9 @@ pub struct CompanionResponse {
     pub status: i32,
     pub message: Option<String>,
     pub backups: Option<HashMap<String, String>>,
+    /// `GetSpec` 的响应：命中包的 TOML 文本。
+    #[serde(default)]
+    pub spec: Option<String>,
 }
 
 impl CompanionResponse {
@@ -867,6 +895,7 @@ impl CompanionResponse {
             status: 0,
             message: None,
             backups: None,
+            spec: None,
         }
     }
 
@@ -875,6 +904,7 @@ impl CompanionResponse {
             status: -1,
             message: Some(msg.into()),
             backups: None,
+            spec: None,
         }
     }
 
@@ -883,6 +913,7 @@ impl CompanionResponse {
             status: 0,
             message: None,
             backups: Some(backups),
+            spec: None,
         }
     }
 }

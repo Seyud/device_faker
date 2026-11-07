@@ -9,6 +9,7 @@ mod fg_observer;
 mod file_logger;
 mod hooks;
 mod prop_backend;
+mod spec;
 
 use std::{
     collections::{HashMap, HashSet},
@@ -28,7 +29,7 @@ use zygisk_api::{
     raw::ZygiskRaw,
 };
 
-const CONFIG_PATH: &str = "/data/adb/device_faker/config/config.toml";
+pub(crate) const CONFIG_PATH: &str = "/data/adb/device_faker/config/config.toml";
 
 /// 版本 banner 用的构建标识：`v1.6.0 (16e269f, built 2026-10-31 04:28:53 +08:00)`。
 ///
@@ -88,9 +89,12 @@ struct MyModule;
 impl ZygiskModule for MyModule {
     type Api = V4;
 
-    fn on_load(&self, _api: ZygiskApi<V4>, _env: EnvUnowned) {
+    fn on_load(&self, mut api: ZygiskApi<V4>, _env: EnvUnowned) {
         #[cfg(target_os = "android")]
         file_logger::init_buffer_only();
+        // 尽早拉起 companion：它负责把用户配置预渲染成 per-package spec，
+        // 这样第一批 app 启动时 spec 已经就绪。
+        let _ = companion::send_companion_command(&mut api, &companion::CompanionRequest::Ping);
     }
 
     fn pre_app_specialize(
@@ -156,7 +160,7 @@ impl MyModule {
         // companion 侧现在自己管理会话状态和恢复逻辑；
         // Zygisk 模块侧不再需要跨应用恢复（ACTIVE_RESET_SESSION 已移除）。
 
-        let config = match load_config() {
+        let config = match load_config_for(api, &package_with_user, &package_name) {
             Ok(Some(cfg)) => cfg,
             Ok(None) => {
                 api.set_option(ZygiskOption::DlCloseModuleLibrary);
@@ -381,7 +385,28 @@ impl MyModule {
     }
 }
 
-fn load_config() -> anyhow::Result<Option<Config>> {
+/// 从 companion 取某个包的预渲染 spec（内存，不落盘），按 `pkg@uid` → 裸包名顺序尝试。
+fn load_config_for(
+    api: &mut ZygiskApi<V4>,
+    package_with_user: &str,
+    package: &str,
+) -> anyhow::Result<Option<Config>> {
+    let request = companion::CompanionRequest::GetSpec(companion::SpecRequest {
+        keys: vec![package_with_user.to_string(), package.to_string()],
+    });
+    let response = companion::send_companion_command(api, &request)?;
+    if response.status != 0 {
+        return Ok(None);
+    }
+    let Some(text) = response.spec else {
+        return Ok(None);
+    };
+    Ok(Some(Config::from_toml(&text)?))
+}
+
+/// 只在 companion 侧使用：读取 `/data/adb/device_faker/config/config.toml` 用于渲染 spec。
+/// 模块进程（zygote 域）读不到该路径，不会走到这里。
+pub(crate) fn load_config() -> anyhow::Result<Option<Config>> {
     if !Path::new(CONFIG_PATH).exists() {
         return Ok(None);
     }

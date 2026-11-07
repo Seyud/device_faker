@@ -73,7 +73,6 @@ if [ -f "$CONFIG_FILE" ]; then
         tr_print "- 备份旧配置到: $BACKUP_FILE" "- Backup saved to: $BACKUP_FILE"
         cp -f "$CONFIG_FILE" "$BACKUP_FILE"
         chmod 644 "$CONFIG_FILE" "$BACKUP_FILE"
-        chcon u:object_r:system_file:s0 "$CONFIG_FILE" "$BACKUP_FILE" 2>/dev/null || true
     else
         tr_print "- 已选择：使用现有配置" "- Selected: keep existing config"
         SHOULD_COPY_CONFIG=false
@@ -83,10 +82,8 @@ fi
 if [ "$SHOULD_COPY_CONFIG" = true ]; then
     cp -f "$MODPATH/config.toml" "$CONFIG_FILE"
     chmod 644 "$CONFIG_FILE"
-    chcon u:object_r:system_file:s0 "$CONFIG_FILE" 2>/dev/null || true
 fi
 
-chcon u:object_r:system_file:s0 "$CONFIG_DIR" 2>/dev/null || true
 
 rm -f "$MODPATH/config.toml"
 
