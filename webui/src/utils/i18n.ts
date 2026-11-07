@@ -174,7 +174,7 @@ export const messages = {
         description: '描述',
       },
       search: {
-        placeholder: '搜索模板名称、品牌或型号',
+        placeholder: '搜索模板名称、品牌、型号或描述',
         no_results: '未找到匹配的模板',
       },
       categories: {
@@ -202,7 +202,7 @@ export const messages = {
         close: '关闭',
         source_button: '模板源：{source}',
         refresh: '刷新列表',
-        search_placeholder: '搜索模板名称、品牌或分类',
+        search_placeholder: '搜索模板名称、品牌、机型或描述',
         clear_filters: '清空筛选',
         progress_label: '详情加载',
         progress_pending: '等待开始',
@@ -582,7 +582,7 @@ export const messages = {
         description: 'Description',
       },
       search: {
-        placeholder: 'Search by name, brand, or model',
+        placeholder: 'Search by name, brand, model, or description',
         no_results: 'No matching templates found',
       },
       categories: {
@@ -611,7 +611,7 @@ export const messages = {
         close: 'Close',
         source_button: 'Source: {source}',
         refresh: 'Refresh List',
-        search_placeholder: 'Search by template name, brand, or category',
+        search_placeholder: 'Search by name, brand, model, or description',
         clear_filters: 'Clear Filters',
         progress_label: 'Details Progress',
         progress_pending: 'Waiting to start',
@@ -994,7 +994,7 @@ export const messages = {
         description: 'Açıklama',
       },
       search: {
-        placeholder: 'İsme, markaya veya modele göre arayın',
+        placeholder: 'İsme, markaya, modele veya açıklamaya göre arayın',
         no_results: 'Eşleşen şablon bulunamadı.',
       },
       categories: {
@@ -1023,7 +1023,7 @@ export const messages = {
         close: 'Kapat',
         source_button: 'Kaynak: {source}',
         refresh: 'Listeyi Yenile',
-        search_placeholder: 'Şablon adına, markaya veya kategoriye göre arama yapın',
+        search_placeholder: 'Şablon adı, marka, model veya açıklamaya göre arama yapın',
         clear_filters: 'Filtreleri Temizle',
         progress_label: 'İlerleme Detayı',
         progress_pending: 'Başlamayı bekliyorum',

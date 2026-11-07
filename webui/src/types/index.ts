@@ -72,6 +72,11 @@ export interface OnlineTemplateIndexItem {
   sha?: string
   source: OnlineTemplateSource
   contentUrl: string
+  /**
+   * 模板描述（来自聚合文件/详情里的 meta.description）。
+   * 随索引一起进快照缓存，保证未加载详情（或详情加载失败）时也能按描述搜索。
+   */
+  description?: string
 }
 
 export interface OnlineTemplateDetail {

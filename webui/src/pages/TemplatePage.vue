@@ -109,7 +109,7 @@ const filteredTemplates = computed(() => {
     return allTemplates.value
   }
 
-  const query = searchQuery.value.toLowerCase().trim()
+  const tokens = searchQuery.value.toLowerCase().trim().split(/\s+/).filter(Boolean)
 
   return allTemplates.value.filter(({ name, template }) => {
     const searchFields = [
@@ -122,10 +122,12 @@ const filteredTemplates = computed(() => {
       template.product || '',
       template.board || '',
       template.soc_model || '',
+      template.description || '',
     ]
 
-    const matches = searchFields.some((field) => field.toLowerCase().includes(query))
-    return matches
+    // 与在线模板库一致：多关键词按「全部命中」匹配，描述里的多段信息也能搜到
+    const haystack = searchFields.join(' ').toLowerCase()
+    return tokens.every((token) => haystack.includes(token))
   })
 })
 

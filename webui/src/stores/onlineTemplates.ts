@@ -157,7 +157,9 @@ export const useOnlineTemplatesStore = defineStore('online-templates', () => {
   )
 
   /**
-   * 详情检索用的 haystack：索引字段 + 已就绪详情里的型号/营销名/代号/厂商/作者/描述。
+   * 详情检索用的 haystack：索引字段 + 详情里的型号/营销名/代号/厂商/作者/描述。
+   * 描述优先取模板自带的 description（聚合文件回填到索引，快照可复用），
+   * 这样即使详情还没加载完（或加载失败）也能按模板描述搜索。
    * 预计算一次（只在目录或详情变化时重算），避免每次按键都对 700+ 条重拼字符串。
    */
   const searchHaystackById = computed(() => {
@@ -170,11 +172,14 @@ export const useOnlineTemplatesStore = defineStore('online-templates', () => {
         item.displayName,
         item.brand || '',
         item.category,
+        item.description,
         detail?.template.model,
         detail?.template.marketname,
         detail?.template.device,
         detail?.template.product,
         detail?.template.manufacturer,
+        detail?.template.author,
+        detail?.template.description,
         detail?.meta?.author,
         detail?.meta?.description,
       ]
@@ -189,7 +194,7 @@ export const useOnlineTemplatesStore = defineStore('online-templates', () => {
   })
 
   const filteredIndexItems = computed(() => {
-    const needle = keyword.value.trim().toLowerCase()
+    const tokens = keyword.value.trim().toLowerCase().split(/\s+/).filter(Boolean)
 
     return indexItems.value.filter((item) => {
       if (selectedCategory.value !== 'all' && item.category !== selectedCategory.value) {
@@ -200,11 +205,14 @@ export const useOnlineTemplatesStore = defineStore('online-templates', () => {
         return false
       }
 
-      if (!needle) {
+      if (tokens.length === 0) {
         return true
       }
 
-      return (searchHaystackById.value[item.id] || '').includes(needle)
+      const haystack = searchHaystackById.value[item.id] || ''
+      // 多关键词（空白分隔）按「全部命中」匹配：描述常是多段自由文本，
+      // 例如“拼多多 / 企业微信 平板模式”可以用「拼多多 平板」搜到。
+      return tokens.every((token) => haystack.includes(token))
     })
   })
 
@@ -606,9 +614,19 @@ export const useOnlineTemplatesStore = defineStore('online-templates', () => {
     }
 
     detailStateById.value = next
-    indexItems.value = items.map((item) =>
-      bundle.has(item.name) ? { ...item, sha: bundleSha } : item
-    )
+    indexItems.value = items.map((item) => {
+      const detail = bundle.get(item.name)
+      if (!detail) {
+        return item
+      }
+
+      const description = detail.meta?.description ?? detail.template.description
+      return {
+        ...item,
+        sha: bundleSha,
+        ...(description ? { description } : {}),
+      }
+    })
     indexById.value = buildIndexMap(indexItems.value)
     recomputeProgress()
     updateDetailsStatus()
