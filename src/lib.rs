@@ -31,7 +31,8 @@ use zygisk_api::{
 
 pub(crate) const CONFIG_PATH: &str = "/data/adb/device_faker/config/config.toml";
 
-/// 版本 banner 用的构建标识：`v1.6.0 (16e269f, built 2026-10-31 04:28:53 +08:00)`。
+/// 版本 banner 用的构建标识，格式为 `v<版本> (<git hash>, built <YYYY-MM-DD HH:MM:SS ±HH:MM>)`，
+/// 例如 `v1.7.0 (16e269f, built 2026-10-31 04:28:53 +08:00)`。
 ///
 /// - `DF_GIT_HASH` / `DF_BUILD_EPOCH` 由 `build.rs` 在编译期注入（工作区脏会带 `-dirty`）；
 /// - 时间按**设备本地时区**渲染并附 UTC 偏移——真机上排查「时钟/时区」相关问题时，

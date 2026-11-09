@@ -5,6 +5,33 @@ lastUpdated: false
 
 # 📝 Changelog
 
+## ⬆️[v1.6.0 → v1.7.0] - 2026-11-09
+
+### 🆕 New Features
+- 🩺 Property areas unreadable from the app domain can now be spoofed
+- 🚀 WebUI now uses KernelSU pm/io interfaces — package enumeration and file I/O without shell forks
+- 🔄 Template conversion runs fully in the frontend: import legacy module ZIP / system.prop directly, no CLI or temp files
+- 🎯 Online template library now searches by description and fetches one aggregated file instead of per-file requests
+- 🧩 Completed custom_props explicit directives and __DELETE__ (soc_model / android_version families, sdk_int deletable)
+- 🪟 Foreground detection now uses the TOP set, so split-screen / floating windows are no longer misjudged
+- 🏷️ Log now carries a version banner (version + git hash + build time)
+
+### 🐛 Bug Fixes
+- 🛡️ Fixed config being unreadable after Zygisk Next 1.5.3's extensive sepolicy.rule changes, which silently disabled all spoofing (config is now read by companion)
+- 🎲 Fixed random device model when several templates declare the same package (deterministic by config order, with a WebUI warning)
+- 🇨🇳 Fixed installer text falling back to English on Chinese devices
+- 🔍 Fixed WebUI clone config resolution; editing a clone no longer wipes the main app entry
+- 🧹 Fixed duplicate rows and false "configured" badges for one app instance, with explicit config scope labels
+- 🕵️ Property area copies now use anonymous-mapping camouflage
+- 🧪 Fixed properties not applying during the cold-start window in hybrid mode (in-process COW now also runs with companion_resetprop)
+
+### ⚡ Improvements
+- 🏎️ Zero-fork property reads in companion — existence checks and backups query the property areas directly
+- 👻 Never write properties absent on this ROM — no more enumerable ghost properties
+- 📦 Module no longer bundles device_faker_cli, shrinking the package
+- 🧱 cow_props split into 11 modules for clearer responsibilities
+- ⬆️ Dependency upgrades: rsbinder 0.11, 20+ WebUI dependencies, CI now on NDK r30
+
 ## ⬆️[v1.5.0 → v1.6.0] - 2026-09-26
 
 ### 🆕 New Features
