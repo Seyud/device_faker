@@ -11,7 +11,7 @@ Device Faker **不支持 Magisk 自带的 Zygisk**，需要第三方 Zygisk 实�
 | 条件 | 要求 |
 |------|------|
 | Zygisk 实现 | 除 Magisk 自带 Zygisk 外均可 |
-| 架构 | 64 位 |
+| 架构 | arm64 |
 
 ## 下载
 

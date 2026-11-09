@@ -16,7 +16,7 @@ The WebUI is implemented using the pure KernelSU WebUI API (the old WebUI-X API 
 |------|---------------|
 | **Apps** | View installed apps, toggle system apps, see config status, edit app config |
 | **Templates** | Create/edit/delete device templates, apply to multiple packages, import/export, rename |
-| **Settings** | Global toggles, module info, language switch |
+| **Settings** | Theme and language, config conversion tool, debug toggle |
 | **Status** | Runtime overview, log summary, version info |
 
 ## App Management
@@ -27,9 +27,13 @@ The WebUI is implemented using the pure KernelSU WebUI API (the old WebUI-X API 
 - Toggle "Show system apps" to configure system apps too
 - Search by package name or app label
 
-### Multi-user App Display
+### Multi-user and Cloned Apps
 
-Multi-user instances of the same app (e.g. `com.foo` and `com.foo@999`) are **grouped by package name**, making it easy to configure them per user.
+Multi-user instances of the same app (e.g. `com.foo` and `com.foo@999`) are deduplicated **per instance**: `com.foo` and `com.foo@0` are the same instance and no longer show up as two rows.
+
+- A clone that only matches the main app config through the fallback shows a blue **"Inherited from main app"** badge instead of "Configured", so you never mistake it for having its own config
+- The config dialog states the scope being edited: main app only (user 0) / main app + all clones (fallback) / that clone only (user N)
+- Use `com.foo@0` to spoil only the main app and keep clones inheriting nothing; use the bare `com.foo` to cover the main app and all its clones
 
 ### Editing App Config
 
@@ -55,10 +59,15 @@ In the app editor, choose "Apply template" to populate all fields from a templat
 
 When editing a template, add package names to its `packages` list. Those packages will automatically use the template once saved.
 
+::: warning One package, one template
+When several templates declare the same package, only the one written **first** in `config.toml` wins at runtime. A banner at the top of the Templates page lists which template takes effect and which is ignored; deduplicate package names before merging templates.
+:::
+
 ### Import / Export
 
-- Export all current templates to a file for backup
-- Import a backup file to restore templates
+- **Export**: tick the templates to export (multi-select), generate TOML text and copy it in one click
+- **Import**: paste TOML text to import templates
+- **Read this device**: run `getprop` and turn the current device properties into a template you can save or copy
 
 ### Online Template Library
 
@@ -66,7 +75,7 @@ The WebUI has a built-in online template source. Import community templates with
 
 - Repository: [device_faker_config](https://github.com/Seyud/device_faker_config)
 - Browse by brand/model category
-- Search support
+- Search by brand, model, template name or **template description**; space-separated keywords must all match
 
 ::: tip Contribute
 If you have a well-organized device config, submit it to `device_faker_config` to help others.
@@ -75,6 +84,12 @@ If you have a well-organized device config, submit it to `device_faker_config` t
 ### Rename Existing Templates
 
 Templates can be renamed. After renaming, all app configs that reference the template are automatically updated.
+
+## Settings Page
+
+- **Display settings**: theme (follow system / light / dark) and UI language (follow system / 简体中文 / English / Türkçe)
+- **Tools → Config conversion**: pick a zip from another device-spoofing module; the WebUI parses its `system.prop` inside the WebView and converts it into a template (nothing written to disk, no CLI calls). Review the preview, then "Save as template". Handy when migrating from an older module
+- **Module → Debug mode**: the `config.toml` `debug` switch; Info-level records only reach the log file when it is on
 
 ## Gestures and Navigation
 
@@ -94,4 +109,4 @@ The UI language follows the system language by default, and can also be switched
 ## Next Steps
 
 - [Basic Configuration](./configuration/index.md) — understand the TOML fields behind the WebUI
-- [FAQ](./faq.md) — check here first if the WebUI won't open or shows a blank screen
+- [FAQ](./faq.md) — check here first if something in the WebUI does not work

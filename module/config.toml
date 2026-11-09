@@ -36,7 +36,6 @@ product = "NX809J"
 fingerprint = "REDMAGIC/NX809J-UN/NX809J:16/BP2A.250605.031.A3/20251017.000000:user/release-keys"
 build_id = "BP2A.250605.031.A3"
 
-[templates]
 [templates."一加15"]
 manufacturer = "OnePlus"
 brand = "OnePlus"
@@ -165,9 +164,10 @@ manufacturer = "vivo"
 #
 # 所有应用自动走统一执行流：
 #   ① Build 字段覆写 (JNI)      — 始终执行（如有设备字段）
-#   ② 属性伪装                   — companion_resetprop = true 时全部走
-#                                  companion resetprop；否则 COW 优先，
-#                                  COW 未找到的属性与 __DELETE__ 走 companion
+#   ② 属性伪装                   — 默认严格 COW：属性写进本进程私有的
+#                                  属性区副本，只影响本进程，绝不降级为
+#                                  全局写入；companion_resetprop = true 时
+#                                  在 COW 之外再由 companion 直写全局属性
 #   ③ DPI 伪装                   — 按需（仅设置 dpi 时）
 #   ④ DlClose                    — 始终执行（零模块驻留）
 #
@@ -181,13 +181,17 @@ manufacturer = "vivo"
 # 字段优先级：[[apps]] 直接配置 > 模板 packages 列表
 #
 # 【COW 引擎】
-# - 通过 mmap COW 重映射 prop_area 文件，直接覆写属性内存
-# - 覆盖 __system_property_get 和 __system_property_read_callback（同一份 mmap）
+# - 为本进程复制一份属性区（MAP_PRIVATE|MAP_ANONYMOUS 匿名副本），把 bionic
+#   属性后端的 context 节点指向副本，再在副本上改写属性
+# - 覆盖 __system_property_get 和 __system_property_read_callback 的 native 读取
+# - 真实的 /dev/__properties__/* 映射保持只读、原样不动，
+#   /proc/self/maps 里不会留下 rw-p 写映射指纹
 # - 无 GOT/PLT 修改，无 JNI native method 替换
-# - 模块写完即 DlClose，/proc/self/maps 干净
+# - 模块写完即 DlClose，进程里不残留模块映射
 #
 # 【__DELETE__ 标记】
-# 设置属性值为 "__DELETE__" 可通过 companion resetprop 删除该属性。
+# 设置属性值为 "__DELETE__" 可通过 companion resetprop 删除该属性
+# （仅在 companion_resetprop = true 时真正执行；默认严格 COW 下会跳过并记 WARN）。
 # 设置属性值为 "__EMPTY__" 将属性值设为空字符串。
 #
 # 【DPI 伪装】

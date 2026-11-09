@@ -106,4 +106,4 @@ manufacturer = "Samsung"
 ## Next Steps
 
 - [Field Reference](./fields.md) — what each field controls
-- [Advanced Usage](./advanced.md) — property mechanisms, full example, debugging
+- [Advanced Usage](./advanced.md) — how it takes effect, a full example, debugging

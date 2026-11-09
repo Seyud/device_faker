@@ -10,10 +10,6 @@ Device Faker does **not** support Magisk's built-in Zygisk. You must install a t
 
 No. The built-in implementation does not meet this module's requirements.
 
-### Does it support 32-bit devices or Android 11 and below?
-
-The module targets **arm64 + API 31 (Android 12)**. 32-bit devices and Android 11 or lower are not supported.
-
 ### The module is installed but has no effect
 
 1. Is a Zygisk implementation installed and enabled?
@@ -69,12 +65,6 @@ Match order: `@999` is tried first, then falls back to the version without the s
 
 ## Properties and Performance
 
-### Can `getprop` read the spoofed values?
-
-By default, **no**. Spoofing only applies inside the target app's process, and `getprop` runs as a separate process that still reads the real values.
-
-Set `companion_resetprop = true` for that app if you need `getprop` to see the spoofed values too. Note that this makes the spoofed values system-wide; they are restored automatically when the app exits.
-
 ### What's the difference between `__DELETE__` and leaving a field empty?
 
 | Usage | Behavior |
@@ -82,24 +72,9 @@ Set `companion_resetprop = true` for that app if you need `getprop` to see the s
 | Structured field omitted or `""` | Leave the field unchanged |
 | `custom_props` `"key" = ""` | Set the property to an empty string |
 | `custom_props` `"key" = "__EMPTY__"` | Set the property to an empty string |
-| `custom_props` `"key" = "__DELETE__"` | Delete the property |
-
-### Does it slow down app launch?
-
-Barely. Spoofing happens once during app launch and usually takes milliseconds — you generally won't notice the difference.
+| `custom_props` `"key" = "__DELETE__"` | Delete the property (**only with `companion_resetprop = true`**; under strict COW it is skipped with a WARN) |
 
 ## WebUI
-
-### WebUI won't open / blank screen
-
-1. Make sure the module is enabled and you have rebooted
-2. Make sure your manager supports WebUI (KernelSU / recent Magisk / APatch)
-3. Try clearing the manager's cache or restarting the manager
-4. Check the logs: `/data/adb/device_faker/logs/device_faker.log`
-
-### WebUI can't swipe
-
-Make sure your module version is ≥ v1.5.0. v1.5.0 and later improved swipe-back navigation and page transition animations.
 
 ### Online template library fails to load
 
@@ -107,16 +82,3 @@ Make sure your module version is ≥ v1.5.0. v1.5.0 and later improved swipe-bac
 - Template source: https://github.com/Seyud/device_faker_config
 - Accessing GitHub may require a network tool in some regions
 
-## Properties and System
-
-### Does spoofing affect other apps?
-
-No. Spoofing is per-app; only configured apps are modified. Other apps and system processes remain unchanged (unless `companion_resetprop = true` is enabled).
-
-### Does DPI restore when the app goes to the background?
-
-Yes. DPI changes are foreground-gated. About 2 seconds after the target app goes to the background or exits, the companion restores the original override and reapplies it when the app returns to the foreground.
-
-### When should I enable `companion_resetprop`?
-
-Only when you need subprocesses (e.g. `getprop`, `Runtime.exec`) or system services to also read the spoofed values. Most scenarios work fine with the default COW mode.

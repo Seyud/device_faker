@@ -72,7 +72,7 @@ model = "FakeModel"
 | 结构化字段省略或 `""` | 不修改该字段 |
 | `custom_props` 里 `"key" = ""` | 把该属性设为空字符串 |
 | `custom_props` 里 `"key" = "__EMPTY__"` | 把该属性设为空字符串 |
-| `custom_props` 里 `"key" = "__DELETE__"` | 删除该属性 |
+| `custom_props` 里 `"key" = "__DELETE__"` | 删除该属性（**仅在 `companion_resetprop = true` 时执行**，默认严格 COW 下跳过并记 WARN） |
 
 ## WebUI 相关
 

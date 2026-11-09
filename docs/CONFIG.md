@@ -116,7 +116,7 @@ manufacturer = "Samsung"
 
 ### 设备信息字段
 
-以下字段可在模板或 `[[apps]]` 中使用。每个字段同时驱动 `android.os.Build` 静态字段（JNI 覆写，仅在应用进程内生效）和对应的系统属性（供 native 层 `__system_property_get` 等读取）：
+以下字段可在模板或 `[[apps]]` 中使用。每个字段会同时改写应用内读到的 `android.os.Build` 字段与对应的系统属性，两者保持一致：
 
 | 字段 | Build 字段 | 系统属性 | 说明 |
 |------|-----------|----------|------|
@@ -125,19 +125,20 @@ manufacturer = "Samsung"
 | `marketname` | —（仅属性） | `ro.product.marketname` + `ro.vendor.oplus.market.name` | 市场名 (如: Nothing Phone (3))；OnePlus/OPPO 设备读取后者 |
 | `model` | `Build.MODEL` | `ro.product.model` 及分区变体 | 型号 (如: NX769J, SM-S9280) |
 | `name` | —（仅属性） | `ro.product.name` 及分区变体 | 产品内部名 (如: popsicle) |
-| `device` | `Build.DEVICE` | `ro.product.device` 及分区变体 | 代号 (如: xuanyuan)；未设置时自动使用 `name` 的值 |
-| `product` | `Build.PRODUCT` | —（无系统属性） | 代号 (如: xuanyuan)，仅覆写 Build 字段 |
+| `device` | `Build.DEVICE` | `ro.product.device` 及分区变体 | 代号 (如: xuanyuan)；未设置时依次回落到 `product` / `name` |
+| `product` | `Build.PRODUCT` | `ro.product.name` 及分区变体 + `ro.build.product` | 产品代号 (如: xuanyuan)；与 `name` 同源，未设置时两者互相回填 |
 | `hardware` | `Build.HARDWARE` | `ro.hardware` | 硬件名 (如: qcom)，无分区变体 |
 | `board` | `Build.BOARD` | `ro.product.board` | 主板名 (如: kalama)，无分区变体 |
+| `soc_model` | `Build.SOC_MODEL` | `ro.soc.model` | SoC 型号 (如: SM8550)，无分区变体 |
 | `fingerprint` | `Build.FINGERPRINT` | `ro.build.fingerprint` | 指纹 |
 | `build_id` | `Build.ID` | `ro.build.id`、`ro.system.build.id`、`ro.vendor.build.id`、`ro.product.build.id` | Build ID (如: UKQ1.230917.001) |
 | `characteristics` | —（仅属性） | `ro.build.characteristics` | 特性 (如: tablet) |
 
-> **「分区变体」**指 `ro.product.{odm,vendor,system,system_ext,product,bootimage,system_dlkm,vendor_dlkm,odm_dlkm}.<字段>`。bionic 的属性读取按前缀路由到不同分区属性区，OnePlus/OPPO 等设备会读取这些变体，统一写入可保证各设备读取一致。
+> **「分区变体」**指 `ro.product.{odm,vendor,system,system_ext,product,bootimage,system_dlkm,vendor_dlkm,odm_dlkm}.<字段>`：不同厂商的 ROM 会从不同分区读取机型信息，整族写入才能让各条读取路径拿到一致的值。
 >
-> 其中 **`system_dlkm` / `vendor_dlkm` / `odm_dlkm` 走「已存在才补齐」**：这三个动态内核模块分区只在 Android 13+ 的部分 ROM 上导出这些副本（Android 13+ 的部分 ROM 才有这些分区副本，旧设备可能一个都没有）。设备上不存在的 key 不会被写入——否则会在 `getprop` 全量输出与 `__system_property_foreach` 里留下真机没有的可枚举「幽灵属性」，而 app 对本就读不到的属性做伪装也没有收益。构建属性族 `ro.{system_dlkm,vendor_dlkm,odm_dlkm}.build.*` 同理。
->
-> **营销名（`marketname`）整族同样走「已存在才补齐」**：`ro.product.marketname` 及其分区副本、以及 OnePlus/OPPO 别名 `ro.vendor.oplus.market.name`，只有在真机上已存在时才会被写入。OEM 营销名通常只导出 base 与 odm/vendor 等少数几个分区副本，其余副本（含非 OPPO 机型上的 `ro.vendor.oplus.market.name`）并不存在，无条件写入会在 `getprop` 全量输出里凭空多出真机没有的属性。COW 与 companion 两条路径都在写入前做存在性判断（companion 用进程内属性区查询，无额外进程开销）。**例外**：`custom_props` 里**显式写出**的 key 不受该规则限制——那是用户指名要求写入的属性（例如在非 OPPO 机型上伪装 OPPO 的 `ro.vendor.oplus.market.name`），照写不误；门控只作用于模块**自动展开**出来的分区/属性族变体。
+> 设备上**原本不存在**的属性不会被写入——例如部分 ROM 没有 `ro.product.system_dlkm.model`，非 OPPO 机型没有 `ro.vendor.oplus.market.name`。这样不会凭空多出真机没有的属性，也不影响伪装效果。**例外**：`custom_props` 里显式写出的 key 按你的要求照写。
+
+> **指纹会自动补全其它字段**：只写 `fingerprint` 也能得到一致的伪装——模块解析指纹后，把**未显式填写**的 `brand`、`product`、`device`、`android_version`、`build_id`、`incremental` 自动补上（已写的字段不会被覆盖）。补出来的 `incremental` 会同时驱动 `Build.VERSION.INCREMENTAL` 与 `ro.build.version.incremental`。
 
 ### Android 版本与构建信息伪装
 
@@ -149,13 +150,11 @@ manufacturer = "Samsung"
 | `incremental` | `Build.VERSION.INCREMENTAL` | `ro.build.version.incremental` 及分区变体 | `compiler260228234011` |
 | `security_patch` | `Build.VERSION.SECURITY_PATCH` | `ro.build.version.security_patch` 及分区变体 | `2025-06-05` |
 
-> `security_patch` 会按 `ro.{system,system_ext,product,vendor,odm,bootimage,system_dlkm,vendor_dlkm,odm_dlkm}.build.version.security_patch` 整族写入，另写入裸名副本 `ro.vendor.build.security_patch`（即「供应商安全补丁级别」）。
->
-> `sdk_int` 是数值字段，但同样支持字符串标记 `sdk_int = "__DELETE__"`，用于删除 `ro.build.version.sdk` 整族（高风险操作；WebUI 表单不提供该写法，需手改 TOML）。
+> `security_patch` 会连同各分区副本一起写入。
 
 ### DPI伪装
 
-在模板或 `[[apps]]` 中设置 `dpi`（范围 `120`–`640`），例如 `dpi = 420`。模块先保存当前的DPI；目标应用退后台约 2 秒或退出后恢复原值，回到前台时重新应用。没有备份时会重置`。
+在模板或 `[[apps]]` 中设置 `dpi`（范围 `120`–`640`），例如 `dpi = 420`。模块先保存当前的 DPI；目标应用退到后台或退出后恢复原值，回到前台时重新应用。原本没有保存时走 DPI 重置。
 
 ### 自定义属性
 
@@ -181,18 +180,18 @@ manufacturer = "Custom"
 | `"__EMPTY__"` | 设置为空字符串 |
 | `"__DELETE__"` | 删除该属性（结构化字段则删除对应属性族；**仅在 `companion_resetprop = true` 时真正执行**） |
 
-> **结构化字段**（`brand`、`manufacturer`、`model`、`name`、`device`、`marketname`、`fingerprint`、`build_id`、`incremental`、`security_patch`、`display_id`、`characteristics`、`hardware`、`board`、`soc_model`、`android_version`、`sdk_int`）写 `__DELETE__` 时：该字段对应的**属性族**全部进入删除列表（如 `brand` → `ro.product.brand` + 9 个分区副本），同时**不再写入属性、也不再 hook 对应 Build 字段**；`__EMPTY__` 则按空字符串写入（属性与 Build 字段都会写成空串）。少数字段额外删除 OEM 别名：`marketname` → `ro.vendor.oplus.market.name`，`product`/`name` → `ro.build.product`，`security_patch` → `ro.vendor.build.security_patch`。
+> **结构化字段**（`brand`、`model`、`fingerprint`、`android_version` 等）写 `__DELETE__` 时：该字段不再写入，并删除它对应的整组属性；`__EMPTY__` 则按空字符串写入（Build 字段同样写成空串）。少数字段会一并处理厂商别名（如 `marketname`、`security_patch`）。
 >
-> `sdk_int` 的 `__DELETE__` 写作 `sdk_int = "__DELETE__"`（数值字段的字符串标记，WebUI 表单只接受整数，需手改 TOML），删除 `ro.build.version.sdk` 整族——**SDK_INT 由该属性派生，删除后相关读取会失败，属高风险操作**。
+> `sdk_int` 的写法是 `sdk_int = "__DELETE__"`（数值字段的字符串标记，WebUI 表单只接受整数，需手改 TOML）——**删除后相关读取会失败，属高风险操作**。
 >
-> ⚠️ **删除只作用于全局属性，且只在 `companion_resetprop = true` 时生效**：默认的严格 COW 模式不写全局属性区，删除列表会被跳过并逐条打 WARN（`__DELETE__` 与 per-process 隔离天然冲突）。`__EMPTY__` 在 COW 模式可以正常生效（写进程内私有副本）。
+> ⚠️ **删除只在 `companion_resetprop = true` 时执行**：默认模式下删除列表会被跳过（`__DELETE__` 与「只影响本应用」天然冲突）。`__EMPTY__` 在默认模式下也能正常生效。
 
 ### 功能开关
 
 | 字段 | 默认值 | 说明 |
 |------|--------|------|
-| `companion_resetprop` | `false` | `true` 时跳过 COW，所有属性交给 companion 进程 `resetprop` 写入（直写属性区，绕过 property_service），全系统读取一致；`false`（默认）时 COW 优先，仅影响当前进程内存。详见 [属性伪造机制](#属性伪造机制) |
-| `dpi` | — | 临时设置系统显示 density（`wm density`），范围 `120`–`640`；由 companion 保存并恢复原始 override |
+| `companion_resetprop` | `false` | `true` 时伪装值对**全系统生效**（`getprop`、其它应用也能读到），应用切到后台或退出后自动恢复真值；`false`（默认）时只在应用自己的进程内生效。需要全局生效时再开启，详见 [生效方式](#生效方式) |
+| `dpi` | — | 临时修改系统显示密度（范围 `120`–`640`）；应用退到后台或退出后自动恢复原值 |
 | `force_denylist_unmount` | 继承 `default_force_denylist_unmount` | 对该应用强制启用 Zygisk `FORCE_DENYLIST_UNMOUNT`；优先级：应用 > 模板 > 全局默认 |
 
 **注意**：
@@ -201,16 +200,18 @@ manufacturer = "Custom"
 - `[[apps]]` 中的字段整记录取代模板，未设置字段不回落（见[优先级](#优先级)）
 - 不在上表中的字段会被静默忽略（不影响解析）
 
-## 属性伪造机制
+## 生效方式
 
 所有应用统一走同一执行流（无需选择模式）：
 
 ```
-① JNI 覆写 Build 静态字段 → ② COW 或 companion resetprop → ③ DPI 伪装 → ④ DlClose 卸载模块
+① 覆写 Build 字段 → ② 修改系统属性 → ③ DPI 伪装 → ④ 卸载模块
 ```
 
-- **COW（默认）**：**只影响当前进程**；模块写完立即 DlClose，零驻留
-- **companion resetprop（`companion_resetprop = true`）**：全部属性经 companion 进程直写属性区（`skip_svc`，绕过 property_service），**全系统读取一致**；应用退出或退后台约 2 秒后自动恢复原始值，回到前台重新应用
+- **默认（推荐）**：伪装只在**应用自己的进程内**生效——应用里读到的都是伪装值，其它应用、系统服务和 `getprop` 读到的仍是真值；模块改完立即卸载，不常驻、不残留。
+- **`companion_resetprop = true`**：伪装值**对全系统生效**（`getprop`、其它应用也能读到）。应用切到后台或退出后自动恢复真值，回到前台重新应用。
+
+需要让检测工具（多数通过 `getprop` 子进程读取属性）也看到伪装值时，才需要开启 `companion_resetprop`；代价是应用运行期间伪装值对全局可见。
 
 ## 完整配置示例
 

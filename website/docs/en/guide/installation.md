@@ -13,7 +13,6 @@ Install it and reboot before installing this module. Otherwise installation abor
 | Item | Requirement |
 |------|-------------|
 | Zygisk implementation | Any implementation other than Magisk's built-in Zygisk |
-| Android version | Android 12 and above |
 | Architecture | arm64 |
 
 ## Download
@@ -27,24 +26,6 @@ Grab the latest `device_faker-(release).zip` from the
 2. Open the Modules page in Magisk / KernelSU / APatch
 3. Choose "Install from storage" and select the downloaded zip
 4. **Reboot your device** after installation completes
-
-## Verifying the Installation
-
-### Check module status
-
-Confirm Device Faker is enabled in the Magisk / KernelSU module list.
-
-### Verify that spoofing works
-
-After configuring a model for an app and restarting it, open a device-info app such as `DevCheck`, `Scene` or `AIDA64` and confirm the model shown is the spoofed value.
-
-### View logs
-
-After enabling debug logging (see [Advanced Usage](./configuration/advanced.md#debugging-and-logs)), logs are written to:
-
-```
-/data/adb/device_faker/logs/device_faker.log
-```
 
 ## Updating
 

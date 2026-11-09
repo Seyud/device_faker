@@ -106,4 +106,4 @@ manufacturer = "Samsung"
 ## 下一步
 
 - [字段参考](./fields.md) — 能伪装哪些字段，每个字段对应什么
-- [高级用法](./advanced.md) — 属性伪造机制、完整示例、调试
+- [高级用法](./advanced.md) — 生效方式、完整示例、调试
