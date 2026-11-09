@@ -42,8 +42,9 @@
                 v-else-if="authorLink.platform === '酷安'"
                 class="brand-logo coolapk-logo"
                 aria-hidden="true"
-                >C</span
               >
+                <img :src="coolapkIcon" alt="" />
+              </span>
               <span>{{ authorLink.fullText }}</span>
             </button>
           </div>
@@ -149,6 +150,7 @@
 import { computed } from 'vue'
 import { siGithub, siQq, siTelegram } from 'simple-icons'
 import { Globe, MessageCircleMore } from '@lucide/vue'
+import coolapkIcon from '../../assets/coolapk.png'
 import { useConfigStore } from '../../stores/config'
 import { useI18n } from '../../utils/i18n'
 import { execCommand } from '../../utils/ksu'
@@ -414,10 +416,12 @@ function openAuthorLink(platform: string) {
   color: #27a7e7;
 }
 
-.coolapk-logo {
-  color: #4caf50;
-  font-size: 0.9rem;
-  font-weight: 700;
+.coolapk-logo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 0.25rem;
+  object-fit: contain;
 }
 
 .github-logo {
