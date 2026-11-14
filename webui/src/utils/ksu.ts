@@ -107,8 +107,30 @@ export async function readFile(path: string): Promise<string> {
   }
 
   // TODO(legacy-compat): io 接口不可用时回退 `cat`，兼容期结束后删除该分支
-  const content = io.support ? await readFileViaIo(path) : await execCommand(`cat ${path}`)
+  const content = io.support ? await readFileViaIoWithFallback(path) : await readFileViaShell(path)
   return content.trim()
+}
+
+/** 旧版兼容路径：整读文件走 `cat`。 */
+async function readFileViaShell(path: string): Promise<string> {
+  return await execCommand(`cat ${shellQuotePath(path)}`)
+}
+
+/**
+ * 经 io 读文件，**io 抛错时回落 `cat`**。
+ *
+ * `io.support` 只判断 `typeof ksu.io === "function"`，并不保证宿主真的实现了
+ * `FileInputStream`（各 manager 版本差异很大：方法缺失、`open()` 直接抛错、
+ * 只支持部分路径）。此前这里没有兜底，宿主 io 不可用时整个读取就失败——调用方
+ * 只能静默降级（版本号一直停在 `0.0.0`、config.toml 回落到 localStorage 备份），
+ * 看起来像「WebUI 只坏了一个字段」。
+ */
+async function readFileViaIoWithFallback(path: string): Promise<string> {
+  try {
+    return await readFileViaIo(path)
+  } catch {
+    return await readFileViaShell(path)
+  }
 }
 
 /** 经 io 接口整读一个文件（base64 分块读出后按 UTF-8 解码）。 */
@@ -162,7 +184,12 @@ export async function writeFile(path: string, content: string): Promise<void> {
     return
   }
 
-  await writeFileViaIo(path, content)
+  try {
+    await writeFileViaIo(path, content)
+  } catch {
+    // io 存在但不可用（宿主未实现 / 抛错）时回落 heredoc 写入
+    await writeFileViaShell(path, content)
+  }
 }
 
 /**
@@ -549,10 +576,62 @@ export async function getInstalledApps(options: GetInstalledAppsOptions = {}) {
   }
 }
 
+/**
+ * 宿主 `ksu.moduleInfo()` 的返回结构（KernelSU / WeaveMask 等 manager 直供）。
+ *
+ * 只声明 WebUI 实际用到的字段：`moduleDir` 是当前模块的**真实目录**（
+ * `/data/adb/modules/<目录名>`，目录名与 module.prop 里的 `id` 不保证相同），
+ * 其余是 manager 已解析好的 module.prop 元数据。
+ */
+export interface KsuModuleInfo {
+  moduleDir?: string
+  id?: string
+  name?: string
+  version?: string
+  versionCode?: number
+  author?: string
+  description?: string
+  enabled?: boolean
+}
+
+/** `ksu` 桥接里本文件需要的那部分（`kernelsu-alt` 未封装 `moduleInfo`）。 */
+interface KsuBridgeWithModuleInfo {
+  moduleInfo?: () => string | KsuModuleInfo
+}
+
+/**
+ * 取当前模块元数据。
+ *
+ * 走宿主的 `ksu.moduleInfo()`（KernelSU `WebViewInterface.kt::moduleInfo`）：
+ * 元数据由 manager 从模块目录解析，**不读文件、不走 shell**，因此
+ * `ksu.io` / `ksu.exec` 不可用、或模块目录名与 module.prop 的 `id` 不一致时
+ * 依然能拿到版本号。
+ *
+ * 宿主未实现（旧版 manager / 非 KernelSU 系宿主）时返回 `null`，调用方自行回退。
+ */
+export function getModuleInfo(): KsuModuleInfo | null {
+  const bridge = (globalThis as { ksu?: KsuBridgeWithModuleInfo }).ksu
+  if (!bridge || typeof bridge.moduleInfo !== 'function') {
+    return null
+  }
+
+  try {
+    const raw = bridge.moduleInfo()
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+    return parsed && typeof parsed === 'object' ? (parsed as KsuModuleInfo) : null
+  } catch {
+    return null
+  }
+}
+
 export async function fileExists(path: string): Promise<boolean> {
   if (io.support) {
-    // isFile() 与旧的 `test -f` 同义：只认普通文件（目录返回 false）
-    return io.File(path).isFile()
+    try {
+      // isFile() 与旧的 `test -f` 同义：只认普通文件（目录返回 false）
+      return io.File(path).isFile()
+    } catch {
+      // 宿主 io 不可用，落到下面的 `test -f`
+    }
   }
 
   // TODO(legacy-compat): io 接口不可用时回退 `test -f`，兼容期结束后删除该分支
@@ -567,8 +646,12 @@ export async function fileExists(path: string): Promise<boolean> {
 // 创建目录
 export async function mkdir(path: string): Promise<void> {
   if (io.support) {
-    io.File(path).mkdirs()
-    return
+    try {
+      io.File(path).mkdirs()
+      return
+    } catch {
+      // 宿主 io 不可用，落到下面的 `mkdir -p`
+    }
   }
 
   // TODO(legacy-compat): io 接口不可用时回退 `mkdir -p`，兼容期结束后删除该分支

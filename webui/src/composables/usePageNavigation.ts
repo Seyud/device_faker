@@ -128,7 +128,7 @@ export function usePageNavigation(opts?: {
   ])
   const activePageIndex = computed(() => PAGE_INDEX_BY_ID[activePage.value])
   const versionDisplay = computed(() =>
-    configStore.moduleMetaReady ? configStore.moduleVersion : '--'
+    configStore.moduleMetaReady && configStore.moduleVersion ? configStore.moduleVersion : '--'
   )
 
   function markPageAsRendered(pageId: PageId) {

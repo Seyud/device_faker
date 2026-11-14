@@ -142,7 +142,7 @@ const moduleVersion = computed(() => configStore.moduleVersion)
 const configReady = computed(() => configStore.configReady)
 const moduleMetaReady = computed(() => configStore.moduleMetaReady)
 const moduleVersionDisplay = computed(() =>
-  moduleMetaReady.value ? moduleVersionMain.value : '--'
+  moduleMetaReady.value && moduleVersionMain.value ? moduleVersionMain.value : '--'
 )
 const moduleVersionMain = computed(() => {
   const v = moduleVersion.value

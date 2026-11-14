@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Config, Template, AppConfig } from '../types'
-import { readFile, writeFile, fileExists, mkdir } from '../utils/ksu'
+import { readFile, writeFile, fileExists, mkdir, getModuleInfo } from '../utils/ksu'
 import { parse as parseToml, stringify as stringifyToml } from 'smol-toml'
 import { anyConfigApplies, resolvePackageConfig, resolvePackageMatches } from '../utils/package'
 import { toast } from 'kernelsu-alt'
@@ -13,12 +13,30 @@ import {
 } from '../utils/config'
 
 const CONFIG_PATH = '/data/adb/device_faker/config/config.toml'
-const MODULE_PROP_PATH = '/data/adb/modules/device_faker/module.prop'
+/**
+ * module.prop 的兜底位置（宿主没有 `ksu.moduleInfo()` 时用）。
+ *
+ * 正常情况下路径由 `ksu.moduleInfo().moduleDir` 给出：模块目录名取决于安装方式
+ * （Magisk/KernelSU 装到 `/data/adb/modules/<目录名>`，未重启的新版模块在
+ * `/data/adb/modules_update/<目录名>`），目录名与 module.prop 里的 `id` 不保证
+ * 相同，硬编码 `device_faker` 会在这些情况下读到不存在的文件。
+ */
+const MODULE_PROP_FALLBACK_PATHS = [
+  '/data/adb/modules/device_faker/module.prop',
+  '/data/adb/modules_update/device_faker/module.prop',
+]
 const CONFIG_BACKUP_KEY = 'device_faker_config_backup_v1'
+
+/** 解析 module.prop 的键值行（`key=value`，忽略注释与空行）。 */
+function parseModulePropValue(content: string, key: string): string {
+  const match = content.match(new RegExp(`^${key}=(.+)$`, 'm'))
+  return match ? match[1].trim() : ''
+}
 
 export const useConfigStore = defineStore('config', () => {
   const config = ref<Config>({})
-  const moduleVersion = ref('0.0.0')
+  // 未知时留空，由 UI 渲染成 `--`（避免把"没读到"显示成假的 0.0.0）
+  const moduleVersion = ref('')
   const moduleAuthor = ref('Seyud')
   const loading = ref(false)
   const error = ref<string | null>(null)
@@ -127,19 +145,36 @@ export const useConfigStore = defineStore('config', () => {
 
   // 加载模块版本
   async function loadModuleVersion() {
-    try {
-      const content = await readFile(MODULE_PROP_PATH)
-      const versionMatch = content.match(/version=(.+)/)
-      if (versionMatch) {
-        moduleVersion.value = versionMatch[1].trim()
-      }
+    // 首选宿主直供的 `ksu.moduleInfo()`：不依赖文件读写、也不依赖模块目录名。
+    const moduleInfo = getModuleInfo()
+    let version = (moduleInfo?.version || '').trim()
+    let author = (moduleInfo?.author || '').trim()
 
-      const authorMatch = content.match(/author=(.+)/)
-      if (authorMatch) {
-        moduleAuthor.value = authorMatch[1].trim()
+    if (!version || !author) {
+      const candidates: string[] = []
+      if (moduleInfo?.moduleDir) {
+        candidates.push(`${moduleInfo.moduleDir.replace(/\/+$/, '')}/module.prop`)
       }
-    } catch {
-      // 使用默认版本
+      candidates.push(...MODULE_PROP_FALLBACK_PATHS)
+
+      for (const path of candidates) {
+        try {
+          const content = await readFile(path)
+          if (!content) continue
+          if (!version) version = parseModulePropValue(content, 'version')
+          if (!author) author = parseModulePropValue(content, 'author')
+          if (version && author) break
+        } catch {
+          // 该路径不可读（不存在 / 无权限），继续尝试下一个
+        }
+      }
+    }
+
+    if (version) {
+      moduleVersion.value = version
+    }
+    if (author) {
+      moduleAuthor.value = author
     }
   }
 
