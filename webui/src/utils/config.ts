@@ -75,6 +75,28 @@ function normalizeCustomProps(value: unknown): CustomProps | undefined {
   return Object.keys(customProps).length > 0 ? customProps : undefined
 }
 
+function asOptionalU32Id(value: unknown): number | string | undefined {
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 0xffffffff) {
+    return value
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return undefined
+    if (/^0[xX][0-9a-fA-F]+$/.test(trimmed)) {
+      const parsed = Number.parseInt(trimmed.slice(2), 16)
+      if (Number.isInteger(parsed) && parsed >= 0 && parsed <= 0xffffffff) {
+        return trimmed
+      }
+    } else if (/^\d+$/.test(trimmed)) {
+      const parsed = Number.parseInt(trimmed, 10)
+      if (Number.isInteger(parsed) && parsed >= 0 && parsed <= 0xffffffff) {
+        return parsed
+      }
+    }
+  }
+  return undefined
+}
+
 function normalizeDeviceInfoFields(source: UnknownRecord): Partial<DeviceInfo> {
   const normalized: Partial<DeviceInfo> = {}
 
@@ -101,6 +123,24 @@ function normalizeDeviceInfoFields(source: UnknownRecord): Partial<DeviceInfo> {
 
   const socModel = asOptionalString(source.soc_model)
   if (socModel !== undefined) normalized.soc_model = socModel
+
+  const gpuRenderer = asOptionalString(source.gpu_renderer) ?? asOptionalString(source.gpu)
+  if (gpuRenderer !== undefined) normalized.gpu_renderer = gpuRenderer
+
+  const gpuVendor = asOptionalString(source.gpu_vendor)
+  if (gpuVendor !== undefined) normalized.gpu_vendor = gpuVendor
+
+  const gpuVendorId = asOptionalU32Id(source.gpu_vendor_id)
+  if (gpuVendorId !== undefined) normalized.gpu_vendor_id = gpuVendorId
+
+  const gpuDeviceId = asOptionalU32Id(source.gpu_device_id)
+  if (gpuDeviceId !== undefined) normalized.gpu_device_id = gpuDeviceId
+
+  const gpuDriverVersion = asOptionalU32Id(source.gpu_driver_version)
+  if (gpuDriverVersion !== undefined) normalized.gpu_driver_version = gpuDriverVersion
+
+  const gpuGlVersion = asOptionalString(source.gpu_gl_version)
+  if (gpuGlVersion !== undefined) normalized.gpu_gl_version = gpuGlVersion
 
   const name = asOptionalString(source.name)
   if (name !== undefined) normalized.name = name

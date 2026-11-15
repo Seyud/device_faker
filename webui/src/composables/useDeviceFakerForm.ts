@@ -18,6 +18,12 @@ export interface DeviceFakerFormData {
   hardware: string
   board: string
   soc_model: string
+  gpu_renderer: string
+  gpu_vendor: string
+  gpu_vendor_id: string
+  gpu_device_id: string
+  gpu_driver_version: string
+  gpu_gl_version: string
   name: string
   marketname: string
   fingerprint: string
@@ -65,6 +71,12 @@ function createEmptyFormData(): DeviceFakerFormData {
     hardware: '',
     board: '',
     soc_model: '',
+    gpu_renderer: '',
+    gpu_vendor: '',
+    gpu_vendor_id: '',
+    gpu_device_id: '',
+    gpu_driver_version: '',
+    gpu_gl_version: '',
     name: '',
     marketname: '',
     fingerprint: '',
@@ -83,6 +95,53 @@ function createEmptyFormData(): DeviceFakerFormData {
   }
 }
 
+function parseOptionalGpuIdInput(raw: string): number | string | undefined {
+  const trimmed = raw.trim()
+  if (!trimmed) return undefined
+  if (/^0[xX][0-9a-fA-F]+$/.test(trimmed)) return trimmed
+  if (/^\d+$/.test(trimmed)) return Number(trimmed)
+  return undefined
+}
+
+function formatOptionalGpuIdInput(val?: number | string): string {
+  if (val === undefined) return ''
+  if (typeof val === 'number') return `0x${val.toString(16).toUpperCase()}`
+  return val
+}
+
+function applyOptionalGpuFieldsToTarget(
+  target: Partial<Template>,
+  formData: DeviceFakerFormData
+): void {
+  const stringFields: Array<[keyof Pick<Template, 'gpu_renderer' | 'gpu_vendor' | 'gpu_gl_version'>, string]> = [
+    ['gpu_renderer', formData.gpu_renderer],
+    ['gpu_vendor', formData.gpu_vendor],
+    ['gpu_gl_version', formData.gpu_gl_version],
+  ]
+  for (const [key, value] of stringFields) {
+    const trimmed = value.trim()
+    if (trimmed) {
+      target[key] = trimmed
+    } else {
+      delete target[key]
+    }
+  }
+
+  const idFields: Array<[keyof Pick<Template, 'gpu_vendor_id' | 'gpu_device_id' | 'gpu_driver_version'>, string]> = [
+    ['gpu_vendor_id', formData.gpu_vendor_id],
+    ['gpu_device_id', formData.gpu_device_id],
+    ['gpu_driver_version', formData.gpu_driver_version],
+  ]
+  for (const [key, value] of idFields) {
+    const parsed = parseOptionalGpuIdInput(value)
+    if (parsed !== undefined) {
+      target[key] = parsed
+    } else {
+      delete target[key]
+    }
+  }
+}
+
 export function formDataToTemplate(formData: DeviceFakerFormData, base?: Template): Template {
   const template: Template = {
     ...(base || {}),
@@ -96,6 +155,8 @@ export function formDataToTemplate(formData: DeviceFakerFormData, base?: Templat
     soc_model: formData.soc_model,
     fingerprint: formData.fingerprint,
   }
+
+  applyOptionalGpuFieldsToTarget(template, formData)
 
   if (formData.android_version) {
     template.android_version = formData.android_version
@@ -200,6 +261,12 @@ export function templateToFormData(template: Template): DeviceFakerFormData {
     hardware: template.hardware || '',
     board: template.board || '',
     soc_model: template.soc_model || '',
+    gpu_renderer: template.gpu_renderer || '',
+    gpu_vendor: template.gpu_vendor || '',
+    gpu_vendor_id: formatOptionalGpuIdInput(template.gpu_vendor_id),
+    gpu_device_id: formatOptionalGpuIdInput(template.gpu_device_id),
+    gpu_driver_version: formatOptionalGpuIdInput(template.gpu_driver_version),
+    gpu_gl_version: template.gpu_gl_version || '',
     name: template.name || '',
     marketname: template.marketname || '',
     fingerprint: template.fingerprint || '',
@@ -228,6 +295,12 @@ export function appConfigToFormData(appConfig: AppConfig): DeviceFakerFormData {
     hardware: appConfig.hardware || '',
     board: appConfig.board || '',
     soc_model: appConfig.soc_model || '',
+    gpu_renderer: appConfig.gpu_renderer || '',
+    gpu_vendor: appConfig.gpu_vendor || '',
+    gpu_vendor_id: formatOptionalGpuIdInput(appConfig.gpu_vendor_id),
+    gpu_device_id: formatOptionalGpuIdInput(appConfig.gpu_device_id),
+    gpu_driver_version: formatOptionalGpuIdInput(appConfig.gpu_driver_version),
+    gpu_gl_version: appConfig.gpu_gl_version || '',
     name: appConfig.name || '',
     marketname: appConfig.marketname || '',
     fingerprint: appConfig.fingerprint || '',
@@ -247,7 +320,7 @@ export function appConfigToFormData(appConfig: AppConfig): DeviceFakerFormData {
 }
 
 export function formDataToAppConfig(formData: DeviceFakerFormData, packageName: string): AppConfig {
-  return {
+  const appConfig: AppConfig = {
     package: packageName,
     manufacturer: formData.manufacturer,
     brand: formData.brand,
@@ -278,6 +351,8 @@ export function formDataToAppConfig(formData: DeviceFakerFormData, packageName: 
     companion_resetprop: formData.companion_resetprop,
     custom_props: entriesToCustomProps(formData.customProps),
   }
+  applyOptionalGpuFieldsToTarget(appConfig, formData)
+  return appConfig
 }
 
 export function useDeviceFakerForm() {

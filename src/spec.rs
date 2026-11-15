@@ -54,6 +54,27 @@ fn app_table(merged: &MergedAppConfig, package: &str) -> toml::Value {
     push_opt(&mut app, "hardware", &merged.hardware);
     push_opt(&mut app, "board", &merged.board);
     push_opt(&mut app, "soc_model", &merged.soc_model);
+    push_opt(&mut app, "gpu_renderer", &merged.gpu_renderer);
+    push_opt(&mut app, "gpu_vendor", &merged.gpu_vendor);
+    if let Some(vendor_id) = merged.gpu_vendor_id {
+        app.insert(
+            "gpu_vendor_id".into(),
+            toml::Value::String(format!("0x{vendor_id:04X}")),
+        );
+    }
+    if let Some(device_id) = merged.gpu_device_id {
+        app.insert(
+            "gpu_device_id".into(),
+            toml::Value::String(format!("0x{device_id:08X}")),
+        );
+    }
+    if let Some(driver_version) = merged.gpu_driver_version {
+        app.insert(
+            "gpu_driver_version".into(),
+            toml::Value::String(format!("0x{driver_version:08X}")),
+        );
+    }
+    push_opt(&mut app, "gpu_gl_version", &merged.gpu_gl_version);
     push_opt(&mut app, "fingerprint", &merged.fingerprint);
     push_opt(&mut app, "build_id", &merged.build_id);
     push_opt(&mut app, "display_id", &merged.display_id);

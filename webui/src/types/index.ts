@@ -25,6 +25,12 @@ export interface DeviceInfo {
   hardware?: string
   board?: string
   soc_model?: string
+  gpu_renderer?: string
+  gpu_vendor?: string
+  gpu_vendor_id?: number | string
+  gpu_device_id?: number | string
+  gpu_driver_version?: number | string
+  gpu_gl_version?: string
   name?: string
   marketname?: string
   fingerprint?: string

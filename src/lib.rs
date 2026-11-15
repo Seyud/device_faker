@@ -7,6 +7,7 @@ mod cow_props;
 mod fg_observer;
 #[cfg(target_os = "android")]
 mod file_logger;
+mod gpu_hook;
 mod hooks;
 mod prop_backend;
 mod spec;
@@ -115,7 +116,9 @@ impl ZygiskModule for MyModule {
         _env: EnvUnowned,
         _args: &<V4 as ZygiskRaw>::AppSpecializeArgs,
     ) {
-        api.set_option(ZygiskOption::DlCloseModuleLibrary);
+        if !gpu_hook::install_in_post_specialize(&mut api) {
+            api.set_option(ZygiskOption::DlCloseModuleLibrary);
+        }
     }
 
     fn pre_server_specialize(
@@ -227,6 +230,14 @@ impl MyModule {
         hook_build_fields(env, &merged)?;
         if config.debug {
             info!("Build fields faked successfully");
+        }
+
+        // ①-pre 运行时 GPU 伪装准备（若配置了任意 gpu_* 字段则跳过 DlClose 并设 Mesa 环境变量）
+        if let Some(gpu_cfg) = merged.resolved_gpu_config() {
+            gpu_hook::prepare_in_pre_specialize(&gpu_cfg, config.debug);
+            if config.debug {
+                info!("GPU spoof prepared for {package_name}: {gpu_cfg:?}");
+            }
         }
 
         // ①-bis 清除 /proc/self/maps 中匹配模式的属性映射（anti-detection）
@@ -342,8 +353,10 @@ impl MyModule {
             warn!("Unreadable-context property synth failed: {e:#}");
         }
 
-        // ③ DlClose（始终执行）
-        api.set_option(ZygiskOption::DlCloseModuleLibrary);
+        // ③ DlClose（未启用 GPU 运行时 Hook 时卸载；启用时留待 post_app_specialize 常驻）
+        if !gpu_hook::is_active() {
+            api.set_option(ZygiskOption::DlCloseModuleLibrary);
+        }
         Ok(())
     }
 

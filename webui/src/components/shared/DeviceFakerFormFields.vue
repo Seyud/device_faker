@@ -57,6 +57,52 @@
   </el-form-item>
 
   <el-collapse>
+    <el-collapse-item :title="t('templates.fields.gpu_section')" name="gpu">
+      <el-form-item :label="t('templates.fields.gpu_renderer')">
+        <el-input
+          v-model="formData.gpu_renderer"
+          :placeholder="t('templates.placeholders.gpu_renderer')"
+        />
+      </el-form-item>
+
+      <el-form-item :label="t('templates.fields.gpu_vendor')">
+        <el-input
+          v-model="formData.gpu_vendor"
+          :placeholder="t('templates.placeholders.gpu_vendor')"
+        />
+      </el-form-item>
+
+      <el-form-item :label="t('templates.fields.gpu_vendor_id')">
+        <el-input
+          v-model="formData.gpu_vendor_id"
+          :placeholder="t('templates.placeholders.gpu_vendor_id')"
+        />
+      </el-form-item>
+
+      <el-form-item :label="t('templates.fields.gpu_device_id')">
+        <el-input
+          v-model="formData.gpu_device_id"
+          :placeholder="t('templates.placeholders.gpu_device_id')"
+        />
+      </el-form-item>
+
+      <el-form-item :label="t('templates.fields.gpu_driver_version')">
+        <el-input
+          v-model="formData.gpu_driver_version"
+          :placeholder="t('templates.placeholders.gpu_driver_version')"
+        />
+      </el-form-item>
+
+      <el-form-item :label="t('templates.fields.gpu_gl_version')">
+        <el-input
+          v-model="formData.gpu_gl_version"
+          :placeholder="t('templates.placeholders.gpu_gl_version')"
+        />
+      </el-form-item>
+    </el-collapse-item>
+  </el-collapse>
+
+  <el-collapse>
     <el-collapse-item :title="t('templates.fields.system')" name="system">
       <el-form-item :label="t('templates.fields.build_id')">
         <el-input v-model="formData.build_id" :placeholder="t('templates.placeholders.build_id')" />

@@ -122,6 +122,8 @@ const filteredTemplates = computed(() => {
       template.product || '',
       template.board || '',
       template.soc_model || '',
+      template.gpu_renderer || '',
+      template.gpu_vendor || '',
       template.description || '',
     ]
 

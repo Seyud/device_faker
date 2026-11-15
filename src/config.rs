@@ -2,13 +2,87 @@ use std::collections::{HashMap, HashSet};
 
 use anyhow::Result;
 use indexmap::IndexMap;
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 
 pub const DPI_MIN: u32 = 120;
 pub const DPI_MAX: u32 = 640;
 
 fn valid_dpi(value: Option<u32>) -> Option<u32> {
     value.filter(|dpi| (DPI_MIN..=DPI_MAX).contains(dpi))
+}
+
+fn parse_u32_hex_or_dec(raw: &str) -> std::result::Result<Option<u32>, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    if let Some(hex) = trimmed
+        .strip_prefix("0x")
+        .or_else(|| trimmed.strip_prefix("0X"))
+    {
+        u32::from_str_radix(hex, 16)
+            .map(Some)
+            .map_err(|e| format!("invalid hex u32 '{trimmed}': {e}"))
+    } else {
+        trimmed
+            .parse::<u32>()
+            .map(Some)
+            .map_err(|e| format!("invalid u32 '{trimmed}': {e}"))
+    }
+}
+
+/// 反序列化可选的 32 位无符号整数（支持 TOML 整数，或 `"0x..."` / 十进制字符串）。
+fn deserialize_opt_u32_hex<'de, D>(deserializer: D) -> std::result::Result<Option<u32>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct OptU32Visitor;
+
+    impl<'de> serde::de::Visitor<'de> for OptU32Visitor {
+        type Value = Option<u32>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("an optional u32 integer or hex/decimal string")
+        }
+
+        fn visit_none<E>(self) -> std::result::Result<Self::Value, E> {
+            Ok(None)
+        }
+
+        fn visit_unit<E>(self) -> std::result::Result<Self::Value, E> {
+            Ok(None)
+        }
+
+        fn visit_some<D2>(self, deserializer: D2) -> std::result::Result<Self::Value, D2::Error>
+        where
+            D2: Deserializer<'de>,
+        {
+            deserializer.deserialize_any(Self)
+        }
+
+        fn visit_u64<E>(self, value: u64) -> std::result::Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            u32::try_from(value).map(Some).map_err(E::custom)
+        }
+
+        fn visit_i64<E>(self, value: i64) -> std::result::Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            u32::try_from(value).map(Some).map_err(E::custom)
+        }
+
+        fn visit_str<E>(self, value: &str) -> std::result::Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            parse_u32_hex_or_dec(value).map_err(E::custom)
+        }
+    }
+
+    deserializer.deserialize_option(OptU32Visitor)
 }
 
 /// `ro.product.*` 会按属性来源顺序读取不同分区的副本。模板字段必须同步这些副本，
@@ -328,6 +402,24 @@ pub struct DeviceTemplate {
     /// SoC 型号伪装（映射 Build.SOC_MODEL + ro.soc.model，单属性无分区副本）
     #[serde(default)]
     pub soc_model: Option<String>,
+    /// GPU 渲染器字符串（OpenGL ES GL_RENDERER 与 Vulkan VkPhysicalDeviceProperties.deviceName）
+    #[serde(default, alias = "gpu")]
+    pub gpu_renderer: Option<String>,
+    /// GPU 厂商字符串（OpenGL ES GL_VENDOR，未填写时根据 gpu_renderer 自动推断常见厂商）
+    #[serde(default)]
+    pub gpu_vendor: Option<String>,
+    /// Vulkan vendorID（支持整数或 "0x5143" 十六进制字符串，未填写时尝试自动推断）
+    #[serde(default, deserialize_with = "deserialize_opt_u32_hex")]
+    pub gpu_vendor_id: Option<u32>,
+    /// Vulkan deviceID（支持整数或 "0x..." 十六进制字符串）
+    #[serde(default, deserialize_with = "deserialize_opt_u32_hex")]
+    pub gpu_device_id: Option<u32>,
+    /// Vulkan driverVersion（支持整数或 "0x..." 十六进制字符串）
+    #[serde(default, deserialize_with = "deserialize_opt_u32_hex")]
+    pub gpu_driver_version: Option<u32>,
+    /// OpenGL ES GL_VERSION 覆盖字符串
+    #[serde(default)]
+    pub gpu_gl_version: Option<String>,
     #[serde(default)]
     pub fingerprint: Option<String>,
     #[serde(default)]
@@ -392,6 +484,24 @@ pub struct AppConfig {
     /// SoC 型号伪装（映射 Build.SOC_MODEL + ro.soc.model，单属性无分区副本）
     #[serde(default)]
     pub soc_model: Option<String>,
+    /// GPU 渲染器字符串（OpenGL ES GL_RENDERER 与 Vulkan VkPhysicalDeviceProperties.deviceName）
+    #[serde(default, alias = "gpu")]
+    pub gpu_renderer: Option<String>,
+    /// GPU 厂商字符串（OpenGL ES GL_VENDOR，未填写时根据 gpu_renderer 自动推断常见厂商）
+    #[serde(default)]
+    pub gpu_vendor: Option<String>,
+    /// Vulkan vendorID（支持整数或 "0x5143" 十六进制字符串，未填写时尝试自动推断）
+    #[serde(default, deserialize_with = "deserialize_opt_u32_hex")]
+    pub gpu_vendor_id: Option<u32>,
+    /// Vulkan deviceID（支持整数或 "0x..." 十六进制字符串）
+    #[serde(default, deserialize_with = "deserialize_opt_u32_hex")]
+    pub gpu_device_id: Option<u32>,
+    /// Vulkan driverVersion（支持整数或 "0x..." 十六进制字符串）
+    #[serde(default, deserialize_with = "deserialize_opt_u32_hex")]
+    pub gpu_driver_version: Option<u32>,
+    /// OpenGL ES GL_VERSION 覆盖字符串
+    #[serde(default)]
+    pub gpu_gl_version: Option<String>,
     #[serde(default)]
     pub fingerprint: Option<String>,
     #[serde(default)]
@@ -503,6 +613,12 @@ impl Config {
                 hardware: app.hardware.clone(),
                 board: app.board.clone(),
                 soc_model: app.soc_model.clone(),
+                gpu_renderer: app.gpu_renderer.clone(),
+                gpu_vendor: app.gpu_vendor.clone(),
+                gpu_vendor_id: app.gpu_vendor_id,
+                gpu_device_id: app.gpu_device_id,
+                gpu_driver_version: app.gpu_driver_version,
+                gpu_gl_version: app.gpu_gl_version.clone(),
                 fingerprint: app.fingerprint.clone(),
                 build_id: app.build_id.clone(),
                 display_id: app.display_id.clone(),
@@ -540,6 +656,12 @@ impl Config {
                 hardware: template.hardware.clone(),
                 board: template.board.clone(),
                 soc_model: template.soc_model.clone(),
+                gpu_renderer: template.gpu_renderer.clone(),
+                gpu_vendor: template.gpu_vendor.clone(),
+                gpu_vendor_id: template.gpu_vendor_id,
+                gpu_device_id: template.gpu_device_id,
+                gpu_driver_version: template.gpu_driver_version,
+                gpu_gl_version: template.gpu_gl_version.clone(),
                 fingerprint: template.fingerprint.clone(),
                 build_id: template.build_id.clone(),
                 display_id: template.display_id.clone(),
@@ -822,6 +944,12 @@ pub struct MergedAppConfig {
     pub hardware: Option<String>,
     pub board: Option<String>,
     pub soc_model: Option<String>,
+    pub gpu_renderer: Option<String>,
+    pub gpu_vendor: Option<String>,
+    pub gpu_vendor_id: Option<u32>,
+    pub gpu_device_id: Option<u32>,
+    pub gpu_driver_version: Option<u32>,
+    pub gpu_gl_version: Option<String>,
     pub fingerprint: Option<String>,
     pub build_id: Option<String>,
     /// 系统版本号 → Build.DISPLAY + ro.build.display.id
@@ -904,5 +1032,197 @@ impl MergedAppConfig {
                 }
             }
         }
+    }
+
+    /// 解析最终生效的 GPU 伪装参数；若未配置任何 GPU 字段则返回 `None`。
+    pub fn resolved_gpu_config(&self) -> Option<ResolvedGpuConfig> {
+        let renderer = non_empty_gpu_str(&self.gpu_renderer).map(str::to_string);
+        let explicit_vendor = non_empty_gpu_str(&self.gpu_vendor).map(str::to_string);
+        let gl_version = non_empty_gpu_str(&self.gpu_gl_version).map(str::to_string);
+
+        if renderer.is_none()
+            && explicit_vendor.is_none()
+            && self.gpu_vendor_id.is_none()
+            && self.gpu_device_id.is_none()
+            && self.gpu_driver_version.is_none()
+            && gl_version.is_none()
+        {
+            return None;
+        }
+
+        let inferred_from_renderer = renderer.as_deref().and_then(match_gpu_vendor_rule);
+        let vendor =
+            explicit_vendor.or_else(|| inferred_from_renderer.map(|r| r.vendor_name.to_string()));
+
+        let vendor_id = self.gpu_vendor_id.or_else(|| {
+            vendor
+                .as_deref()
+                .and_then(match_gpu_vendor_rule)
+                .or(inferred_from_renderer)
+                .map(|r| r.vendor_id)
+        });
+
+        Some(ResolvedGpuConfig {
+            renderer,
+            vendor,
+            vendor_id,
+            device_id: self.gpu_device_id,
+            driver_version: self.gpu_driver_version,
+            gl_version,
+        })
+    }
+}
+
+/// 合并并自动推断后的 GPU 运行时伪装配置
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedGpuConfig {
+    pub renderer: Option<String>,
+    pub vendor: Option<String>,
+    pub vendor_id: Option<u32>,
+    pub device_id: Option<u32>,
+    pub driver_version: Option<u32>,
+    pub gl_version: Option<String>,
+}
+
+struct GpuVendorRule {
+    keywords: &'static [&'static str],
+    vendor_name: &'static str,
+    vendor_id: u32,
+}
+
+const GPU_VENDOR_RULES: &[GpuVendorRule] = &[
+    GpuVendorRule {
+        keywords: &["adreno", "qualcomm"],
+        vendor_name: "Qualcomm",
+        vendor_id: 0x5143,
+    },
+    GpuVendorRule {
+        keywords: &["mali", "immortalis", "arm"],
+        vendor_name: "ARM",
+        vendor_id: 0x13B5,
+    },
+    GpuVendorRule {
+        keywords: &["powervr", "imagination", "img"],
+        vendor_name: "Imagination Technologies",
+        vendor_id: 0x1010,
+    },
+    GpuVendorRule {
+        keywords: &["xclipse", "samsung"],
+        vendor_name: "Samsung",
+        vendor_id: 0x144D,
+    },
+    GpuVendorRule {
+        keywords: &["apple"],
+        vendor_name: "Apple",
+        vendor_id: 0x106B,
+    },
+    GpuVendorRule {
+        keywords: &["nvidia", "tegra", "geforce"],
+        vendor_name: "NVIDIA Corporation",
+        vendor_id: 0x10DE,
+    },
+    GpuVendorRule {
+        keywords: &["intel", "iris", "arc"],
+        vendor_name: "Intel",
+        vendor_id: 0x8086,
+    },
+    GpuVendorRule {
+        keywords: &["radeon", "amd", "rdna"],
+        vendor_name: "AMD",
+        vendor_id: 0x1002,
+    },
+    GpuVendorRule {
+        keywords: &["llvmpipe", "lavapipe", "softpipe", "swiftshader", "mesa"],
+        vendor_name: "Mesa",
+        vendor_id: 0x10005,
+    },
+];
+
+fn non_empty_gpu_str(opt: &Option<String>) -> Option<&str> {
+    opt.as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && *s != "__DELETE__")
+}
+
+fn match_gpu_vendor_rule(text: &str) -> Option<&'static GpuVendorRule> {
+    let lower = text.to_ascii_lowercase();
+    GPU_VENDOR_RULES
+        .iter()
+        .find(|rule| rule.keywords.iter().any(|kw| lower.contains(kw)))
+}
+
+#[cfg(test)]
+mod gpu_tests {
+    use super::*;
+
+    #[test]
+    fn parse_gpu_fields_from_template_and_app_with_hex_and_alias() {
+        let toml_str = r#"
+[templates.OnePlus_15]
+model = "PLK110"
+gpu = "Adreno (TM) 840"
+gpu_device_id = "0x44030000"
+packages = ["com.example.game"]
+
+[[apps]]
+package = "com.example.custom"
+gpu_renderer = "Custom-RayTracer-9000"
+gpu_vendor = "CustomSilicon"
+gpu_vendor_id = 0xCAFE
+gpu_driver_version = "123456"
+gpu_gl_version = "OpenGL ES 3.2 Custom"
+"#;
+
+        let cfg: Config = toml::from_str(toml_str).expect("valid config");
+        let game = cfg.get_merged_config("com.example.game").unwrap();
+        let game_gpu = game.resolved_gpu_config().unwrap();
+        assert_eq!(game_gpu.renderer.as_deref(), Some("Adreno (TM) 840"));
+        assert_eq!(game_gpu.vendor.as_deref(), Some("Qualcomm"));
+        assert_eq!(game_gpu.vendor_id, Some(0x5143));
+        assert_eq!(game_gpu.device_id, Some(0x4403_0000));
+
+        let custom = cfg.get_merged_config("com.example.custom").unwrap();
+        let custom_gpu = custom.resolved_gpu_config().unwrap();
+        assert_eq!(
+            custom_gpu.renderer.as_deref(),
+            Some("Custom-RayTracer-9000")
+        );
+        assert_eq!(custom_gpu.vendor.as_deref(), Some("CustomSilicon"));
+        assert_eq!(custom_gpu.vendor_id, Some(0xCAFE));
+        assert_eq!(custom_gpu.driver_version, Some(123_456));
+        assert_eq!(
+            custom_gpu.gl_version.as_deref(),
+            Some("OpenGL ES 3.2 Custom")
+        );
+    }
+
+    #[test]
+    fn infer_vendor_id_when_only_gpu_vendor_known() {
+        let toml_str = r#"
+[[apps]]
+package = "com.example.mali"
+gpu_renderer = "Prototype-GPU-X"
+gpu_vendor = "ARM"
+"#;
+        let cfg: Config = toml::from_str(toml_str).unwrap();
+        let gpu = cfg
+            .get_merged_config("com.example.mali")
+            .unwrap()
+            .resolved_gpu_config()
+            .unwrap();
+        assert_eq!(gpu.vendor.as_deref(), Some("ARM"));
+        assert_eq!(gpu.vendor_id, Some(0x13B5));
+    }
+
+    #[test]
+    fn no_gpu_fields_returns_none() {
+        let toml_str = r#"
+[[apps]]
+package = "com.example.plain"
+model = "Pixel 9"
+"#;
+        let cfg: Config = toml::from_str(toml_str).unwrap();
+        let merged = cfg.get_merged_config("com.example.plain").unwrap();
+        assert!(merged.resolved_gpu_config().is_none());
     }
 }
