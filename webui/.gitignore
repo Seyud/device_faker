@@ -6,6 +6,10 @@ dist/
 dist-ssr/
 ../webroot/
 
+# unplugin 生成的类型声明（dev/build 时自动重建）
+auto-imports.d.ts
+components.d.ts
+
 # 本地环境变量
 .env.local
 .env.*.local
