@@ -1,3 +1,9 @@
+<!--
+  SPDX-License-Identifier: GPL-3.0-or-later
+  Copyright (c) 2025-2026 Seyud
+  Device Faker: https://github.com/Seyud/device_faker
+-->
+
 <template>
   <div ref="viewportRef" class="virtual-list" @scroll="handleScroll">
     <div class="virtual-spacer" :style="{ height: `${totalHeight}px` }">

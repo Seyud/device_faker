@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2025-2026 Seyud
+// Device Faker: https://github.com/Seyud/device_faker
+
 //! 新属性插入：按 property context 路由定位目标 area，再在私有副本里做 trie 插入。
 
 use std::cell::RefCell;

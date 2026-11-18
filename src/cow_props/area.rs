@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2025-2026 Seyud
+// Device Faker: https://github.com/Seyud/device_faker
+
 //! 属性区私有副本：建立、迁移 bionic context 节点、seal。
 //!
 //! 副本用 `MAP_PRIVATE|MAP_ANONYMOUS` 建立并逐字节复制，seal 后形态与 stock

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2025-2026 Seyud
+// Device Faker: https://github.com/Seyud/device_faker
+
 //! `properties_serial` 的进程私有载体。
 //!
 //! `MmapPropArea::update()` 需要一个可写的 `serial_pa` 来 bump 全局 serial；

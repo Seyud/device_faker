@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2025-2026 Seyud
+// Device Faker: https://github.com/Seyud/device_faker
+
 /**
  * 最小 ZIP 读取器：只为「从 Magisk 模块 ZIP 里取出 system.prop」这一件事服务。
  *

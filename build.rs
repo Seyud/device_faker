@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2025-2026 Seyud
+// Device Faker: https://github.com/Seyud/device_faker
+
 //! 构建期用 rsbinder-aidl 把前台观察相关的 AIDL 编译成 Rust 绑定。
 //!
 //! - `IUidObserver`：系统侧回调我们的接口（onUidStateChanged 等），事务码与

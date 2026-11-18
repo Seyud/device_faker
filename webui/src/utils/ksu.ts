@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2025-2026 Seyud
+// Device Faker: https://github.com/Seyud/device_faker
+
 import { exec, listPackages, getPackagesInfo, pm, io } from 'kernelsu-alt'
 import { normalizePackageName, parsePackageUser } from './package'
 import type { InstalledApp } from '../types'

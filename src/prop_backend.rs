@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2025-2026 Seyud
+// Device Faker: https://github.com/Seyud/device_faker
+
 //! 运行期定位 bionic 的属性后端结构，用于「私有副本」。
 //!
 //! 任一环节失败都返回 `Err`，由调用方降级回原地 COW（并打 WARN 说明原因）。

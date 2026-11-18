@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2025-2026 Seyud
+// Device Faker: https://github.com/Seyud/device_faker
+
 //! 预渲染的 per-package TOML 配置（全内存，不落盘）。
 //!
 //! Zygisk Next 1.5.3 起，模块的 `pre_app_specialize` 运行在 zygote 域，读 `/data/adb`

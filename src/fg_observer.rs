@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2025-2026 Seyud
+// Device Faker: https://github.com/Seyud/device_faker
+
 //! 前台观察者（UidObserver）：companion 内嵌的"事件驱动前台真值"。
 //!
 //! 数据源 = ActivityManager 的 `PROCESS_STATE_TOP`（top resumed activity 所在

@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2025-2026 Seyud
+# Device Faker: https://github.com/Seyud/device_faker
+
 """
 打包 Magisk 模块脚本
 将 module/ 目录打包为可安装的 ZIP 文件

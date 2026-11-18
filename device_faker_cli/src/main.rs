@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2025-2026 Seyud
+// Device Faker: https://github.com/Seyud/device_faker
+
 //! device_faker_cli —— 开发/排障用的命令行工具（`convert` / `convert-props` / `dump-device`）。
 //!
 //! TODO(remove-cli): 自 2026-10-31 起**不再随模块打包**（`xtask` 不再拷贝、`customize.sh`

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2025-2026 Seyud
+// Device Faker: https://github.com/Seyud/device_faker
+
 //! 匿名 VMA 命名（中性名 `linker_alloc`，含内核能力探测）。
 //!
 //! 名字**必须中性**：maps 里出现的任何模块相关字样（device_faker / zygisk / libdf /

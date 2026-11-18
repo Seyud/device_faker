@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2025-2026 Seyud
+// Device Faker: https://github.com/Seyud/device_faker
+
 //! 不可读 context 的进程内合成属性区（S4/S5）。
 //!
 //! 背景见 `AGENTS.md`「不可读属性区：进程内合成区 + `context_` 改写」。

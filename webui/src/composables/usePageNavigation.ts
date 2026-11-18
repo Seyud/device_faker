@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2025-2026 Seyud
+// Device Faker: https://github.com/Seyud/device_faker
+
 import { computed, defineAsyncComponent, defineComponent, h, ref } from 'vue'
 import { FileText, House, Settings, Smartphone } from '@lucide/vue'
 import AppsPageSkeleton from '../components/apps/AppsPageSkeleton.vue'

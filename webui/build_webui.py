@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2025-2026 Seyud
+# Device Faker: https://github.com/Seyud/device_faker
+
 """
 Device Faker WebUI 构建脚本
 这个脚本自动化了 Vue.js 项目的常见构建任务

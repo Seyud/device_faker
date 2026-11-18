@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2025-2026 Seyud
+// Device Faker: https://github.com/Seyud/device_faker
+
 //! COW 属性伪造引擎（按职责拆分的模块化实现）。
 //!
 //! 原单文件 `cow_props.rs`（1400+ 行）拆成子模块：
