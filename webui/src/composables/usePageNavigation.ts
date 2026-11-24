@@ -195,7 +195,7 @@ export function usePageNavigation(opts?: {
     primePage(pageId)
     navigationStore.setCurrentPage(pageId)
     if (!options.skipHistory && !isPopstateActive()) {
-      navigationStore.pushPageToStack(pageId)
+      navigationStore.syncPageHistory(pageId)
     }
 
     // Animate track to the new page (via swipe composable's CSS transition)
@@ -209,7 +209,7 @@ export function usePageNavigation(opts?: {
     activePage.value = pageId
     primePage(pageId)
     navigationStore.setCurrentPage(pageId)
-    navigationStore.pushPageToStack(pageId)
+    navigationStore.syncPageHistory(pageId)
   }
 
   function handlePageChange(pageId: PageId) {

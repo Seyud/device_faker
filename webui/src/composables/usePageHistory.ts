@@ -30,22 +30,15 @@ export function usePageHistory() {
         return
       }
 
-      if (navigationStore.hasPageHistory()) {
-        navigationStore.jumpToHome()
-        const state = window.history?.state as { dfPage?: PageId } | null
-        const restored = state?.dfPage
-        if (restored && PAGE_ORDER.includes(restored)) {
-          setActivePage?.(restored, { skipHistory: true })
-        }
-        handlingPopstate = false
-        return
-      }
-
-      const state = window.history?.state as { dfPage?: PageId; modal?: boolean } | null
-      const targetPage = state?.dfPage
-      if (targetPage && PAGE_ORDER.includes(targetPage)) {
-        setActivePage?.(targetPage, { skipHistory: true })
-      }
+      /*
+       * 返回键落点由浏览器条目状态决定（见 stores/navigation.ts 的 syncPageHistory）：
+       * 非 home 页有一条附加记录，返回即回到 home；home 已是基底记录，
+       * 再返回时 canGoBack() 已为 false，由宿主 finish 掉 WebUIActivity。
+       */
+      const state = window.history?.state as { dfPage?: PageId } | null
+      const targetPage = state?.dfPage && PAGE_ORDER.includes(state.dfPage) ? state.dfPage : 'home'
+      navigationStore.applyPopstatePage(targetPage)
+      setActivePage?.(targetPage, { skipHistory: true })
       handlingPopstate = false
     }
 

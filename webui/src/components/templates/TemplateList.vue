@@ -58,8 +58,13 @@ const emptyText = computed(() => {
 
 <style scoped>
 .template-list {
-  display: flex;
-  flex-direction: column;
+  /*
+   * 宽屏自动分列：模板卡比较矮，单卡最窄 20rem，内容列 960px 时两到三列。
+   * min(100%, 20rem) 保证极窄容器不溢出。
+   */
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
+  align-items: start;
   gap: 1rem;
   box-sizing: border-box;
 }
@@ -74,6 +79,8 @@ const emptyText = computed(() => {
   border-radius: 1rem;
   background: var(--card);
   border: 1px solid var(--border);
+  /* 空态占满整行（列表在宽屏下是网格） */
+  grid-column: 1 / -1;
 }
 
 .empty-icon {

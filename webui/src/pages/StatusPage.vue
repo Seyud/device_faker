@@ -215,10 +215,36 @@ onActivated(() => {
   position: relative;
 }
 
+/*
+ * 状态条目固定 5 个。用 flex-wrap + flex-grow 而不是 grid auto-fit：
+ * 整行按断点等分，末行条目少时就按剩余条目把这一行等分铺满（左对齐），
+ * 于是横屏是 3 + 2×50%，竖屏是 2+2+1，右下角不会再留一块空地。
+ */
 .status-grid {
-  display: grid;
-  grid-template-columns: 1fr;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
   gap: 1rem;
+}
+
+/* 手机竖屏：单列 */
+.status-grid > .status-item {
+  flex: 0 0 100%;
+  min-width: 0;
+}
+
+/* 平板竖屏（≈700dp+）：两列等分；末行只剩一条时独占整行 */
+@media (min-width: 700px) {
+  .status-grid > .status-item {
+    flex: 1 1 calc((100% - 1rem) / 2);
+  }
+}
+
+/* 平板横屏 / 桌面窗口（≥900px，内容列 960dp）：三列等分；末行两条时各占一半 */
+@media (min-width: 900px) {
+  .status-grid > .status-item {
+    flex: 1 1 calc((100% - 2rem) / 3);
+  }
 }
 
 .status-item {

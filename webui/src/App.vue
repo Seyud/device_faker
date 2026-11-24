@@ -50,13 +50,22 @@
       </div>
     </main>
 
-    <nav class="bottom-nav glass-effect">
+    <nav
+      ref="bottomNavRef"
+      :class="['bottom-nav glass-effect', { 'bottom-nav--dragging': navSlider.isDragging.value }]"
+      @pointercancel="navSlider.handlePointerCancel"
+      @pointerdown="navSlider.handlePointerDown"
+      @pointermove="navSlider.handlePointerMove"
+      @pointerup="navSlider.handlePointerEnd"
+    >
+      <!-- 悬浮滑块：底栏的「当前页」指示器，同时是拖动切页的抓手 -->
+      <span class="nav-thumb" :style="navSlider.thumbStyle.value" aria-hidden="true"></span>
       <button
         v-for="page in nav.pages.value"
         :key="page.id"
         :class="['nav-item', { active: nav.activePage.value === page.id }]"
         @pointerdown="primePage(page.id)"
-        @click.stop="nav.handlePageChange(page.id)"
+        @click.stop="handleNavClick(page.id)"
       >
         <component :is="page.icon" :size="24" />
         <span class="nav-label">{{ page.label }}</span>
@@ -71,6 +80,7 @@ import { useSettingsStore } from './stores/settings'
 import { applyThemeToDocument } from './utils/theme'
 import { usePageNavigation, PAGE_INDEX_BY_ID } from './composables/usePageNavigation'
 import { usePageSwipe } from './composables/usePageSwipe'
+import { useNavSlider } from './composables/useNavSlider'
 import { useOverscrollBounce } from './composables/useOverscrollBounce'
 import { usePageHistory } from './composables/usePageHistory'
 import type { PageId } from './stores/navigation'
@@ -94,6 +104,7 @@ let mediaQuery: ReturnType<typeof window.matchMedia> | null = null
 let mediaQueryListener: ((event: { matches: boolean }) => void) | null = null
 
 const pageStageRef = ref<HTMLElement | null>(null)
+const bottomNavRef = ref<HTMLElement | null>(null)
 const settingsStore = useSettingsStore()
 const systemPrefersDark = ref(window.matchMedia('(prefers-color-scheme: dark)').matches)
 
@@ -119,6 +130,38 @@ const swipe = usePageSwipe({
 })
 
 const overscroll = useOverscrollBounce()
+
+/*
+ * 悬浮底栏滑块：按住横向拖动切页。拖动中把页面轨道按进度实时推过去
+ * （swipe.previewTo），松手交给 nav.handlePageChange 做吸附 + 历史入栈；
+ * 落点即当前页时只让它回弹。
+ */
+const navSlider = useNavSlider({
+  navRef: bottomNavRef,
+  activeIndex: nav.activePageIndex,
+  itemCount: computed(() => nav.pages.value.length),
+  // 滑块往右滑 = 选中靠后的页 = 页面内容向左移动，所以进度取负
+  onPreview: (index, progress) => swipe.previewTo(index, -progress * nav.pageStageWidth.value),
+  onHoverIndex: (index) => {
+    const pageId = nav.pages.value[index]?.id
+    if (pageId) nav.primeNeighborPages(index)
+  },
+  onCommit: (index) => {
+    const pageId = nav.pages.value[index]?.id
+    if (!pageId) return
+    if (pageId === nav.activePage.value) {
+      swipe.settleTo(index)
+      return
+    }
+    nav.handlePageChange(pageId)
+  },
+})
+
+function handleNavClick(pageId: PageId) {
+  // 拖动尾巴的 click 丢掉，否则会把刚吸附到的页又拉回抬手处的 tab
+  if (navSlider.shouldSuppressClick()) return
+  nav.handlePageChange(pageId)
+}
 
 function primePage(pageId: PageId) {
   if (pageId === 'home') return
@@ -281,6 +324,9 @@ onUnmounted(() => {
 
 .page-scroll-content {
   min-height: 100%;
+  /* 宽屏收口：内容列居中，避免卡片/表单被拉成满屏长条（手机竖屏够不到上限） */
+  max-width: var(--content-max-width, 60rem);
+  margin-inline: auto;
 }
 
 .page-view {
@@ -327,10 +373,14 @@ onUnmounted(() => {
 }
 
 .bottom-nav {
+  /* 纵向内边距抽成变量：滑块（.nav-thumb）的上下 inset 要和它对齐 */
+  --nav-pad-y: 0.75rem;
   display: flex;
   justify-content: space-around;
   align-items: center;
-  padding: 0.75rem 0;
+  padding: var(--nav-pad-y) 0;
+  /* 横向拖动留给指针手势（滑块切页），纵向仍允许系统滚动/手势 */
+  touch-action: pan-y;
   border-radius: 1rem 1rem 0 0;
   box-shadow: 0 -4px 12px var(--shadow);
   position: fixed;
@@ -350,7 +400,40 @@ onUnmounted(() => {
   border-top: 1px solid rgba(51, 65, 85, 0.4);
 }
 
+/*
+ * 悬浮滑块：既是「当前页」指示器，也是拖动切页的抓手。
+ * 位置/宽度由 useNavSlider 按真实 tab 的 offset 算好写进行内样式，
+ * 这里只负责外观与过渡；静止时带过渡，拖动时去掉过渡跟手。
+ */
+.nav-thumb {
+  position: absolute;
+  top: var(--nav-pad-y);
+  bottom: var(--nav-pad-y);
+  left: 0;
+  z-index: 0;
+  border-radius: 0.5rem;
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.18) 0%, rgba(168, 85, 247, 0.18) 100%);
+  box-shadow: inset 0 0 0 1px rgba(14, 165, 233, 0.16);
+  pointer-events: none;
+  will-change: transform;
+  transition:
+    transform 0.26s cubic-bezier(0.25, 1, 0.5, 1),
+    width 0.2s ease;
+}
+
+.bottom-nav--dragging .nav-thumb {
+  transition: none;
+}
+
+/* 拖动中不要保留起手 tab 的按压反馈（高亮由滑块负责） */
+.bottom-nav--dragging .nav-item:active {
+  background: transparent;
+  transform: none;
+}
+
 .nav-item {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -377,7 +460,8 @@ onUnmounted(() => {
 }
 
 .nav-item.active {
-  background: linear-gradient(135deg, rgba(14, 165, 233, 0.1) 0%, rgba(168, 85, 247, 0.1) 100%);
+  /* 高亮底由 .nav-thumb 负责，这里只改配色，避免出现两个指示器 */
+  background: transparent;
   color: var(--primary);
 }
 
@@ -388,5 +472,39 @@ onUnmounted(() => {
 .nav-label {
   font-size: 0.75rem;
   font-weight: 500;
+}
+
+/*
+ * 宽屏底部导航：满宽 + space-around 会把 4 个 tab 摊到 1280dp 的两端，
+ * 这里收成居中悬浮胶囊（各 tab 等分），并给页面底部多留一点滚动余量。
+ * 注意只改 .bottom-nav 自身定位，导航项点击/高亮逻辑不变。
+ */
+@media (min-width: 700px) {
+  .page-scroll {
+    padding-bottom: 7rem;
+  }
+
+  .bottom-nav {
+    --nav-pad-y: 0.5rem;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: min(32rem, calc(100vw - 2rem));
+    bottom: calc(0.75rem + var(--safe-area-inset-bottom, 0px));
+    padding: var(--nav-pad-y);
+    gap: 0.25rem;
+    border-radius: 1.25rem;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 0 8px 28px var(--shadow);
+  }
+
+  .dark .bottom-nav {
+    border-color: rgba(51, 65, 85, 0.5);
+  }
+
+  .bottom-nav .nav-item {
+    flex: 1 1 0;
+    min-width: 0;
+  }
 }
 </style>

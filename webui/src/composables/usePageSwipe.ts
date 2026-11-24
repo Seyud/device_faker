@@ -296,6 +296,19 @@ export function usePageSwipe(opts: {
     event.stopPropagation()
   }
 
+  /**
+   * 外部手势（底栏悬浮滑块）驱动的轨道预览：把页面轨道钉在 index 页
+   * 再叠加 offsetPx，松手由调用方决定 settleTo 到哪一页。
+   * 只动 transform，不碰 activePage —— 状态提交留在 settleTo 里。
+   */
+  function previewTo(index: number, offsetPx: number) {
+    const track = getTrack()
+    if (!track) return
+    cancelPendingSettle()
+    track.style.transition = ''
+    track.style.transform = `translate3d(${-(index * pageStageWidth.value) + offsetPx}px, 0, 0)`
+  }
+
   function snapToCurrentPage() {
     const track = getTrack()
     if (!track) return
@@ -315,6 +328,7 @@ export function usePageSwipe(opts: {
     handlePointerCancel,
     handleClickCapture,
     settleTo,
+    previewTo,
     snapToCurrentPage,
     cleanup,
   }

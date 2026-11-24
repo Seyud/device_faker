@@ -84,6 +84,8 @@
   display: flex;
   gap: 0.5rem;
   padding-bottom: 0.5rem;
+  /* 与真实筛选条（AppFilters 的 .filter-tabs）保持同宽，宽屏下不会先撑满再收窄 */
+  max-width: 32rem;
 }
 
 .apps-page-skeleton__tab {
@@ -93,8 +95,10 @@
 }
 
 .apps-page-skeleton__list {
-  display: flex;
-  flex-direction: column;
+  /* 与真实列表（AppList 的网格）保持同一分列策略，避免宽屏下骨架/内容跳变 */
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+  align-items: start;
   gap: 0.75rem;
 }
 

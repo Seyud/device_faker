@@ -41,7 +41,7 @@
     />
   </el-form-item>
 
-  <el-form-item :label="t('templates.fields.fingerprint')">
+  <el-form-item class="form-item-wide" :label="t('templates.fields.fingerprint')">
     <el-input
       v-model="formData.fingerprint"
       type="textarea"
@@ -62,7 +62,7 @@
     <el-input v-model="formData.soc_model" :placeholder="t('templates.placeholders.soc_model')" />
   </el-form-item>
 
-  <el-collapse>
+  <el-collapse class="form-block">
     <el-collapse-item :title="t('templates.fields.system')" name="system">
       <el-form-item :label="t('templates.fields.build_id')">
         <el-input v-model="formData.build_id" :placeholder="t('templates.placeholders.build_id')" />
@@ -135,7 +135,7 @@
     </el-select>
   </el-form-item>
 
-  <el-collapse>
+  <el-collapse class="form-block">
     <el-collapse-item :title="t('templates.fields.custom_props')" name="customProps">
       <div v-if="formData.customProps.length === 0" class="custom-props-empty">
         {{ t('templates.customProps.empty') }}
@@ -234,6 +234,17 @@ function applySpecialValue(index: number, command: string) {
 .form-row {
   display: flex;
   gap: 0.75rem;
+}
+
+/*
+ * 宽屏双列表单（依赖对话框里 .el-form 的 grid，见 style.css）：
+ * 拆掉这一行的 flex 外壳，让 manufacturer / brand 各自成为父级网格的列，
+ * 这样它们在宽屏下与其它字段按同样的两列节奏排布，而不是挤成一格里的小两栏。
+ */
+@media (min-width: 900px) {
+  .form-row {
+    display: contents;
+  }
 }
 
 .form-row .el-form-item {

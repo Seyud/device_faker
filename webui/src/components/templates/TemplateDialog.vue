@@ -17,13 +17,13 @@
     modal-class="template-dialog-modal"
   >
     <el-form :model="formData" label-width="120px" label-position="top">
-      <el-form-item :label="t('templates.fields.name')">
+      <el-form-item class="form-item-wide" :label="t('templates.fields.name')">
         <el-input v-model="templateNameInput" :placeholder="t('templates.placeholders.name')" />
       </el-form-item>
 
       <DeviceFakerFormFields>
         <template #packages>
-          <el-form-item :label="t('templates.fields.packages')">
+          <el-form-item class="form-item-wide" :label="t('templates.fields.packages')">
             <div class="package-manager">
               <div :class="['package-input-wrapper', { 'stacked-layout': locale === 'en' }]">
                 <el-autocomplete
@@ -348,96 +348,7 @@ watch(
 }
 </style>
 
-<style scoped>
-.template-dialog :deep(.el-dialog) {
-  margin-top: 5vh !important;
-  margin-bottom: 80px !important;
-  max-height: calc(100vh - 80px - 10vh) !important;
-  display: flex;
-  flex-direction: column;
-  background: rgba(255, 255, 255, 0.15) !important;
-  backdrop-filter: blur(40px) saturate(150%) brightness(1.1);
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
-  box-sizing: border-box;
-  width: 90%;
-  transform: translateZ(0);
-  contain: layout style paint;
-}
-
-@media (prefers-color-scheme: dark) {
-  .template-dialog :deep(.el-dialog) {
-    background: rgba(20, 20, 20, 0.6) !important;
-    backdrop-filter: blur(40px) saturate(150%) brightness(0.9);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-  }
-}
-
-.template-dialog :deep(.el-dialog__body) {
-  flex: 1;
-  overflow-y: auto;
-  padding: 1.5rem;
-  padding-bottom: 2rem;
-  max-height: calc(100vh - 200px);
-  background: transparent;
-}
-
-.template-dialog :deep(.el-dialog__header) {
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-@media (prefers-color-scheme: dark) {
-  .template-dialog :deep(.el-dialog__header) {
-    background: rgba(0, 0, 0, 0.2);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  }
-}
-
-.template-dialog :deep(.el-dialog__footer) {
-  padding: 1rem 1.5rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(20px);
-  flex-shrink: 0;
-}
-
-@media (prefers-color-scheme: dark) {
-  .template-dialog :deep(.el-dialog__footer) {
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(0, 0, 0, 0.3);
-  }
-}
-
-.template-dialog :deep(.el-overlay) {
-  z-index: 2000 !important;
-  backdrop-filter: blur(8px) saturate(110%) !important;
-  background-color: rgba(0, 0, 0, 0.25) !important;
-  contain: layout style paint;
-  overflow: hidden;
-}
-
-@media (prefers-color-scheme: dark) {
-  .template-dialog :deep(.el-overlay) {
-    backdrop-filter: blur(8px) saturate(110%) !important;
-    background-color: rgba(0, 0, 0, 0.4) !important;
-  }
-}
-
-.template-dialog :deep(.el-dialog__body) {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-  contain: layout style paint;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-
-.template-dialog :deep(.el-dialog__body::-webkit-scrollbar) {
-  display: none;
-}
-</style>
+<style scoped></style>
 
 <style>
 .template-dialog-modal {

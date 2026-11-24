@@ -122,8 +122,13 @@ onUnmounted(() => {
 
 <style scoped>
 .apps-list {
-  display: flex;
-  flex-direction: column;
+  /*
+   * 宽屏自动分列：单卡最窄 22rem，内容列 960px 时是两列、手机竖屏仍是一列。
+   * min(100%, 22rem) 保证极窄容器不会因为最小列宽溢出。
+   */
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+  align-items: start;
   gap: 0.75rem;
 }
 
@@ -270,6 +275,8 @@ onUnmounted(() => {
   justify-content: center;
   padding: 3rem 1rem;
   text-align: center;
+  /* 空态占满整行（列表在宽屏下是网格） */
+  grid-column: 1 / -1;
 }
 
 .empty-icon {

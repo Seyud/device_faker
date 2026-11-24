@@ -144,6 +144,8 @@ const toggleSystemApps = () => emit('update:showSystemApps', !props.showSystemAp
   display: flex;
   gap: 0.5rem;
   padding-bottom: 0.5rem;
+  /* 宽屏下两个 tab 各自 flex:1 会被拉到近 500px 宽，这里限宽保持分段控件的观感 */
+  max-width: 32rem;
 }
 
 .filter-tab {
