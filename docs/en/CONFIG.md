@@ -137,6 +137,8 @@ The following fields can be used in templates or `[[apps]]`. Each field rewrites
 >
 > Keys that **do not already exist** on the device are never written — e.g. some ROMs have no `ro.product.system_dlkm.model`, and non-OPPO devices have no `ro.vendor.oplus.market.name`. This keeps properties a real device lacks from appearing, without hurting the spoof. **Exception**: keys written explicitly in `custom_props` are always written.
 
+> **Attestation identity fields (Android 15+)**: newer Android versions read a separate set of "device identity used for attestation" (manufacturer, brand, model, codename, product name) when generating keys. Whenever the device information above is spoofed, that set follows the same values, so no contradiction is left between "device info says the new model" and "attestation still reports the real device".
+
 > **A fingerprint fills in the other fields**: writing only `fingerprint` is enough for a consistent spoof — the module parses it and fills in any of `brand`, `product`, `device`, `android_version`, `build_id` and `incremental` you did **not** set explicitly (values you did write are never overwritten). The derived `incremental` drives both `Build.VERSION.INCREMENTAL` and `ro.build.version.incremental`.
 
 ### Android Version and Build Info Spoofing

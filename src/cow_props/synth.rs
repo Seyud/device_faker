@@ -79,11 +79,11 @@ pub fn apply_unreadable_ctx_synth(
         return Ok(0);
     };
 
-    // 诊断：hook 时刻本进程的 SELinux 域。zygote 域 ⇒ 此刻仍能读 app 不可读的属性区，
+    // 诊断：伪装执行时刻本进程的 SELinux 域。zygote 域 ⇒ 此刻仍能读 app 不可读的属性区，
     // 因此「此刻 find 得到」不能作为「app 可读」的判据。
     if let Ok(dom) = std::fs::read_to_string("/proc/self/attr/current") {
         info!(
-            "unreadable-context synth: hook domain = {dom}, pid={}",
+            "unreadable-context synth: fake domain = {dom}, pid={}",
             std::process::id()
         );
     }

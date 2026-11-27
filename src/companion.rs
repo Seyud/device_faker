@@ -117,7 +117,7 @@ fn warn_fg_unavailable() {
 //
 // 关键：**只有「集合不含会话包」才失活**。旧实现把前台当单槽，于是「另一个 app
 // 也进 TOP」（切小窗 / 分屏 / 浮窗）被误判成本 app 失活，整批全局属性被 restore，
-// 而目标 app 仍在跑自己的检测——它读到的就是真值（Build 是 JVM hook，仍是伪装值
+// 而目标 app 仍在跑自己的检测——它读到的就是真值（Build 字段是进程内 Java 伪装，仍是伪装值
 // ⇒ 三源不一致）。
 
 fn handle_fg_event(top: &[String]) {

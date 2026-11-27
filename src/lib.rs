@@ -7,11 +7,11 @@ mod atexit;
 mod companion;
 mod config;
 mod cow_props;
+mod fake;
 #[cfg(target_os = "android")]
 mod fg_observer;
 #[cfg(target_os = "android")]
 mod file_logger;
-mod hooks;
 mod prop_backend;
 mod spec;
 
@@ -24,7 +24,7 @@ use std::{
 use anyhow::Context;
 use companion::{handle_companion_request, spoof_system_props_via_companion};
 use config::Config;
-use hooks::hook_build_fields;
+use fake::fake_build_fields;
 use jni::{EnvUnowned, errors::ThrowRuntimeExAndDefault};
 use log::{LevelFilter, error, info, warn};
 use zygisk_api::{
@@ -229,7 +229,7 @@ impl MyModule {
 
         // ── 统一执行流（按需调度）──────────────────────────────────────────
         // ① JNI 字段覆写（始终执行）
-        hook_build_fields(env, &merged)?;
+        fake_build_fields(env, &merged)?;
         if config.debug {
             info!("Build fields faked successfully");
         }

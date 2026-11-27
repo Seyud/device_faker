@@ -138,6 +138,8 @@ manufacturer = "Samsung"
 >
 > 设备上**原本不存在**的属性不会被写入——例如部分 ROM 没有 `ro.product.system_dlkm.model`，非 OPPO 机型没有 `ro.vendor.oplus.market.name`。这样不会凭空多出真机没有的属性，也不影响伪装效果。**例外**：`custom_props` 里显式写出的 key 按你的要求照写。
 
+> **attestation 身份字段（Android 15+）**：较新的系统在生成密钥/设备认证时，还会单独读一组「认证用的设备身份」（厂商、品牌、型号、代号、产品名）。上面的设备信息被伪装时，这一组会一并改成相同的值，不会出现「设备信息已是新机型、认证里仍报真机身份」的矛盾。
+
 > **指纹会自动补全其它字段**：只写 `fingerprint` 也能得到一致的伪装——模块解析指纹后，把**未显式填写**的 `brand`、`product`、`device`、`android_version`、`build_id`、`incremental` 自动补上（已写的字段不会被覆盖）。补出来的 `incremental` 会同时驱动 `Build.VERSION.INCREMENTAL` 与 `ro.build.version.incremental`。
 
 ### Android 版本与构建信息伪装
