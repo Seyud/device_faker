@@ -1,4 +1,8 @@
-@import 'tailwindcss';
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (c) 2025-2026 Seyud
+ * Device Faker: https://github.com/Seyud/device_faker
+ */
 
 :root {
   --primary: #0ea5e9;
@@ -14,6 +18,12 @@
   --text-secondary: #6b7280;
   --border: #e5e7eb;
   --shadow: rgba(0, 0, 0, 0.05);
+  /*
+   * 宽屏（平板 / 折叠屏展开态 / 手机横屏 / 桌面窗口）适配的几个关键尺度：
+   * 内容列上限、弹窗上限。手机竖屏永远够不到，等于零影响。
+   */
+  --content-max-width: 60rem; /* 960px：双列卡片各约 460px */
+  --dialog-max-width: 46rem; /* 736px：双列表单各约 350px */
 }
 
 .dark {
@@ -89,7 +99,6 @@ body {
 .glass-effect {
   background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(12px) saturate(180%);
-  -webkit-backdrop-filter: blur(12px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.5);
   box-shadow: 0 8px 32px rgba(14, 165, 233, 0.15);
   /* 确保布局稳定 */
@@ -107,7 +116,6 @@ body {
   border: 1px solid rgba(51, 65, 85, 0.5);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(12px) saturate(140%);
-  -webkit-backdrop-filter: blur(12px) saturate(140%);
 }
 
 /* 强制主题切换时的样式重绘 */
@@ -175,7 +183,6 @@ body {
   pointer-events: auto;
   z-index: 2000 !important;
   backdrop-filter: blur(8px) saturate(120%) !important;
-  -webkit-backdrop-filter: blur(8px) saturate(120%) !important;
   background-color: rgba(0, 0, 0, 0.35) !important;
 }
 
@@ -183,14 +190,12 @@ body {
   pointer-events: auto;
   z-index: 3000 !important;
   backdrop-filter: blur(12px) saturate(130%) !important;
-  -webkit-backdrop-filter: blur(12px) saturate(130%) !important;
   background-color: rgba(0, 0, 0, 0.45) !important;
 }
 
 /* 深色模式下的遮罩层 */
 .dark .el-overlay.is-message-box {
   backdrop-filter: blur(12px) saturate(130%) !important;
-  -webkit-backdrop-filter: blur(12px) saturate(130%) !important;
   background-color: rgba(0, 0, 0, 0.6) !important;
 }
 
@@ -198,20 +203,6 @@ body {
 .bottom-nav {
   pointer-events: auto !important;
   z-index: 100 !important;
-}
-
-/* Work mode dropdown options: allow two-line text */
-.mode-select-popper .el-select-dropdown__item {
-  white-space: pre-line;
-  line-height: 1.4;
-  height: auto;
-  padding-top: 8px;
-  padding-bottom: 8px;
-  word-break: break-word;
-}
-
-.mode-select-popper .el-select-dropdown__item span {
-  white-space: pre-line;
 }
 
 .bottom-nav .nav-item {
@@ -349,7 +340,6 @@ body {
 
 .delete-confirm-box.el-message-box {
   backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
 }
 
 /* 确保 MessageBox 的父容器也有正确的 z-index */
@@ -639,4 +629,79 @@ div.el-message-box__wrapper > div.el-message-box {
 .dark .template-dialog .el-collapse-item__arrow,
 .dark .app-config-dialog .el-collapse-item__arrow {
   color: var(--el-text-color-secondary);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 宽屏适配（平板 / 折叠屏展开态 / 手机横屏 / 桌面窗口 / DeX）
+ *
+ * 现状是纯单列移动布局：所有页面满宽、弹窗 width="90%"，在 700dp+ 的宽度上
+ * 会被拉成"巨型手机"（卡片一行只有一个图标、表单输入框一米长）。
+ * 这里只做"收口"：内容列限宽居中、列表自动分列、表单双列、弹窗限宽。
+ * 逻辑层（滑页位移、手势、虚拟列表）一行未动——pageStage/page-track 仍占满
+ * 视口宽度，syncPageStageWidth 量到的宽度不变。
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/*
+ * 弹窗布局（真机实测 2026-11-24）：下面这些规则以前写在各组件的 scoped 样式里
+ * （`.app-config-dialog :deep(.el-dialog)` 之类），但 el-dialog 把 class 落在
+ * `.el-dialog` 自身、且该元素**不带 data-v 作用域属性**，`:deep(.el-dialog)`
+ * 要求「.el-dialog 是 .el-dialog 的后代」永远不成立 ⇒ 全部是死代码。
+ * 结果：弹窗走 EP 默认的 block + margin 15vh，长表单整窗溢出屏幕（平板横屏
+ * 尤其明显），标题/底部按钮跟着一起滚走。这里在全局补上：
+ *   1. 限宽（90% 宽在平板上等于一张一米宽的表单）；
+ *   2. 高度不超视口，内容在 __body 内滚动，标题栏与底部按钮常驻。
+ * 遮罩层用 flex 居中，因为 max-height 已兜住高度，不会出现「顶部滚不到」。
+ */
+.el-dialog {
+  max-width: var(--dialog-max-width);
+  /* 视口高度减去上下留白与安全区，长表单不会顶到状态栏/手势条 */
+  max-height: calc(
+    100dvh - 3rem - var(--safe-area-inset-top, 0px) - var(--safe-area-inset-bottom, 0px)
+  );
+  display: flex;
+  flex-direction: column;
+  margin: 0 !important;
+}
+
+.el-overlay-dialog {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(1.5rem + var(--safe-area-inset-top, 0px)) 1rem
+    calc(1.5rem + var(--safe-area-inset-bottom, 0px));
+  overflow: auto;
+}
+
+.el-dialog__header,
+.el-dialog__footer {
+  flex: 0 0 auto;
+}
+
+.el-dialog__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/*
+ * 表单双列：视口够宽（≥900px）时字段两列排布。
+ * 只作用于两种长表单弹窗（应用配置 / 模板编辑，SettingsPage 的转换结果弹窗
+ * 复用 .template-dialog 类），其它短弹窗不受影响。
+ * 整行元素用 .form-block / .form-item-wide 铺满两列；「manufacturer + brand」
+ * 的 flex 外壳由 DeviceFakerFormFields 自己 display:contents 拆掉。
+ */
+@media (min-width: 900px) {
+  .app-config-dialog .el-form,
+  .template-dialog .el-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 1rem;
+  }
+
+  .app-config-dialog .form-block,
+  .template-dialog .form-block,
+  .app-config-dialog .form-item-wide,
+  .template-dialog .form-item-wide {
+    grid-column: 1 / -1;
+  }
 }

@@ -1,0 +1,14 @@
+# Device Faker CLI 本地构建路径配置（sample）
+#
+# 用法：
+#   1. 复制本文件为 build_config.local.toml
+#   2. 按本机实际路径修改
+#   3. build_cli.py 优先读取 build_config.local.toml（已 gitignore，不会上传）
+#
+# 本 sample 仅作模板提交到远程仓库，路径为占位符。
+
+# Android NDK 安装目录（包含 toolchain 等子目录）
+ndk_path = "C:/android-ndk"
+
+# UPX 安装目录（需包含 upx.exe）
+upx_path = "C:/upx"

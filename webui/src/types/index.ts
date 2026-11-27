@@ -1,4 +1,7 @@
-export type SpoofMode = 'lite' | 'full' | 'resetprop'
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2025-2026 Seyud
+// Device Faker: https://github.com/Seyud/device_faker
+
 export type OnlineTemplateSource = 'gitee' | 'github'
 export type OnlineTemplateLoadState = 'idle' | 'loading' | 'ready' | 'error'
 export type OnlineTemplateDetailsState = 'idle' | 'loading' | 'partial' | 'complete' | 'error'
@@ -9,6 +12,13 @@ export interface CustomProps {
   [key: string]: string
 }
 
+/**
+ * 数值型设置（目前只有 sdk_int）也支持 TOML 的字符串标记 `__DELETE__`
+ * （删除对应属性族，见 docs/CONFIG.md「特殊标记值」）。
+ * WebUI 表单只输入整数；该标记为手改 TOML 的写法，此处仅保证保存/同步时不被丢弃。
+ */
+export type NumericSetting = number | '__DELETE__'
+
 // 设备信息接口
 export interface DeviceInfo {
   manufacturer?: string
@@ -16,21 +26,28 @@ export interface DeviceInfo {
   model?: string
   device?: string
   product?: string
+  hardware?: string
+  board?: string
+  soc_model?: string
   name?: string
   marketname?: string
   fingerprint?: string
   build_id?: string
+  display_id?: string
+  incremental?: string
+  security_patch?: string
   characteristics?: string
   android_version?: string
-  sdk_int?: number
+  sdk_int?: NumericSetting
+  dpi?: number
   custom_props?: CustomProps
   force_denylist_unmount?: boolean
+  companion_resetprop?: boolean
 }
 
 // 机型模板接口
 export interface Template extends DeviceInfo {
   packages?: string[]
-  mode?: SpoofMode
   version?: string
   version_code?: number
   author?: string
@@ -40,7 +57,6 @@ export interface Template extends DeviceInfo {
 // 应用配置接口
 export interface AppConfig extends DeviceInfo {
   package: string
-  mode?: SpoofMode
 }
 
 export interface TemplateMeta {
@@ -60,6 +76,11 @@ export interface OnlineTemplateIndexItem {
   sha?: string
   source: OnlineTemplateSource
   contentUrl: string
+  /**
+   * 模板描述（来自聚合文件/详情里的 meta.description）。
+   * 随索引一起进快照缓存，保证未加载详情（或详情加载失败）时也能按描述搜索。
+   */
+  description?: string
 }
 
 export interface OnlineTemplateDetail {
@@ -105,7 +126,6 @@ export interface OnlineTemplateCacheEntry<T> {
 
 // 配置文件接口
 export interface Config {
-  default_mode?: SpoofMode
   default_force_denylist_unmount?: boolean
   debug?: boolean
   templates?: Record<string, Template>

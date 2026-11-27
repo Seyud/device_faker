@@ -1,0 +1,186 @@
+---
+title: Changelog
+lastUpdated: false
+---
+
+# 📝 Changelog
+
+## ⬆️[v1.6.0 → v1.7.0] - 2026-11-09
+
+### 🆕 New Features
+- 🩺 Property areas unreadable from the app domain can now be spoofed
+- 🚀 WebUI now uses KernelSU pm/io interfaces — package enumeration and file I/O without shell forks
+- 🔄 Template conversion runs fully in the frontend: import legacy module ZIP / system.prop directly, no CLI or temp files
+- 🎯 Online template library now searches by description and fetches one aggregated file instead of per-file requests
+- 🧩 Completed custom_props explicit directives and __DELETE__ (soc_model / android_version families, sdk_int deletable)
+- 🪟 Foreground detection now uses the TOP set, so split-screen / floating windows are no longer misjudged
+- 🏷️ Log now carries a version banner (version + git hash + build time)
+
+### 🐛 Bug Fixes
+- 🛡️ Fixed config being unreadable after Zygisk Next 1.5.3's extensive sepolicy.rule changes, which silently disabled all spoofing (config is now read by companion)
+- 🎲 Fixed random device model when several templates declare the same package (deterministic by config order, with a WebUI warning)
+- 🇨🇳 Fixed installer text falling back to English on Chinese devices
+- 🔍 Fixed WebUI clone config resolution; editing a clone no longer wipes the main app entry
+- 🧹 Fixed duplicate rows and false "configured" badges for one app instance, with explicit config scope labels
+- 🕵️ Property area copies now use anonymous-mapping camouflage
+- 🧪 Fixed properties not applying during the cold-start window in hybrid mode (in-process COW now also runs with companion_resetprop)
+
+### ⚡ Improvements
+- 🏎️ Zero-fork property reads in companion — existence checks and backups query the property areas directly
+- 👻 Never write properties absent on this ROM — no more enumerable ghost properties
+- 📦 Module no longer bundles device_faker_cli, shrinking the package
+- 🧱 cow_props split into 11 modules for clearer responsibilities
+- ⬆️ Dependency upgrades: rsbinder 0.11, 20+ WebUI dependencies, CI now on NDK r30
+
+## ⬆️[v1.5.0 → v1.6.0] - 2026-09-26
+
+### 🆕 New Features
+- 🏷️ Added Build.BOARD / Build.SOC_MODEL camouflage at Build layer
+- 📅 Added security_patch security patch date spoofing field
+- 🆔 Added dedicated display_id / incremental spoofing fields
+- 📐 Added per-app DPI spoofing support
+- ✏️ WebUI custom property spoofing is now editable
+- 📦 Installer script Zygisk detection compatible with unique Zygisk implementations
+- 🔗 Follow dialog added official website entry
+
+### 🐛 Bug Fixes
+- 🔄 Fixed two foreground gating failures — cold-start race and stale packages.list snapshot
+- 🌐 Fixed massive online template library load failures
+- 🧹 Fixed residual key values when switches are set back to default
+- 🎯 Fixed multi-open package "configured" status misdetection
+- 🔒 Property areas now use process-private copies, eliminating rw-p fingerprint in maps
+- ⏱️ Background restore sped up to 0.5s
+
+### ⚡ Improvements
+- 🏎️ Long property values support in-place update without delete+recreate
+- 🤖 rsbinder upgraded to 0.10, compatible with Android 10~17
+- 🗑️ Removed CPU spoofing feature
+- 🔇 Module and companion fully silent when debug is off
+- 🚀 WebUI critical path slimmed and app list performance optimized
+- 💾 Installer script keeps existing config by default
+
+## ⬆️[v1.4.0 → v1.5.0] - 2026-08-01
+
+### 🆕 New Features
+- 🌍 Added Turkish language translations
+- 🧬 Added CPU camouflage
+- 👥 WebUI apps page supports multi-user apps display
+- 📦 Installer script added Zygisk detection and automatic Chinese/English language switching
+- 🔒 New COW property spoofing engine — replaces full mode, per-process isolation with zero residency
+- 🔄 companion_resetprop switch replaces resetprop mode
+- 🏷️ Added Build.HARDWARE camouflage at Build layer
+
+### ⚡ Improvements
+- ⚡ Optimized module underlying performance (by @Tools-cx-app)
+- 👆 WebUI supports step-by-step swipe-back navigation
+- 🎬 Optimized WebUI page transition animations
+- 🏗️ Refactored logging system
+- 🎨 Optimized WebUI styles
+- 📦 Updated WebUI build dependencies
+- 🏗️ Removed WebUI-X API, adopted pure KernelSU WebUI API
+- 🏎️ resetprop enabled skip_svc direct write + property area compaction
+- 🏗️ Removed mode distinction — unified into single COW + companion execution flow
+- 🔄 Refactored and optimized companion resetprop restore mechanism
+
+## ⬆️[v1.3.5 → v1.4.0] - 2026-05-02
+
+### 🆕 New Features
+- 🖥️ WebUI apps page supports system app display toggle
+- 🌐 WebUI online template library added GitHub source
+- 🏷️ Added build_id and Build.ID camouflage support for all three modes
+- 📥 WebUI template page added import/export tools and local template export
+- 📤 WebUI template card added export button
+- 👆 WebUI supports swipe gesture to switch between pages
+- ✏️ WebUI template page supports editing existing template names
+
+### 🐛 Bug Fixes
+- 🧹 Fixed residual old values when clearing partial fields in WebUI template editor
+- 🔄 Fixed state sync issue of custom property camouflage session when switching between foreground and background in resetprop mode
+
+### ⚡ Improvements
+- 🔗 Updated to adapt jni 0.22 API
+- ⚡ Significantly optimized WebUI page switching performance
+- 🏎️ Optimized WebUI app list loading performance
+- 🏗️ Refactored the entire WebUI online template library pipeline
+- 📏 Used cutting-edge Web technology pretext to optimize text height measurement in online template virtual list
+- 🚀 Optimized WebUI first screen page switch responsiveness
+- 🎬 Added WebUI page switching animation
+- 🦀 Refactored external resetprop binary call into built-in Rust library (by @Tools-cx-app)
+- 💾 Improved configuration file backup format
+
+## ⬆️[v1.3.0 → v1.3.5] - 2026-03-20
+
+### 🆕 New Features
+- 👁️ WebUI home page added follow module
+
+### 🐛 Bug Fixes
+- 🔧 Fixed WebUI scrolling issue caused by changes in Android System WebView rendering logic
+- 🔧 Fixed configuration parsing failure due to old Android System WebView not supporting ES2022 standard
+
+### ⚡ Improvements
+- 🏗️ Replaced python scripts with xtask for core compilation (by @Tools-cx-app)
+- 🌐 Optimized WebUI online template library loading, added wget loading method and retry mechanism
+- 🎨 Optimized WebUI app configuration editing interface interaction
+- ⚡ Optimized WebUI app list loading display
+- 📋 Improved WebUI configuration reading, parsing, editing and saving
+
+## ⬆️[v1.2.0 → v1.3.0] - 2026-01-22
+
+### 🆕 New Features
+- 📦 WebUI supports displaying configured but not installed package names
+- 🏷️ WebUI online template library added brand classification
+- 🤖 Added Android version camouflage and custom attribute features
+- 🔍 Added template search function
+- 👥 WebUI supports displaying and distinguishing multi-user package names
+
+### ⚡ Improvements
+- 🎨 Optimized WebUI styles and layout
+- ⚡ Optimized WebUI application list loading
+- 🔧 characteristics field supports full mode
+- 🔒 Optimized full mode __system_property_get function interception
+- 🔄 Refactored WebUI configuration conversion, supports direct selection
+
+## ⬆️[v1.1.0 → v1.2.0] - 2025-12-17
+
+### 🆕 New Features
+- 🌐 WebUI added online template library feature
+- 🛠️ Added CLI tool for configuration conversion and online template loading
+- 🔧 Added resetprop mode support and characteristics property
+- 🌍 WebUI added multi-language support
+- 📋 Added FORCE_DENYLIST_UNMOUNT support
+- 👥 Added support for multi-user environment configuration
+
+### ⚡ Improvements
+- 💾 Installation script changed backup file suffix to .bak for easier recovery
+- 📱 WebUI adapted KernelSU API 2.1.1 to support KernelSU 2.1.2+ app name and icon display
+- 🎨 Adapted KernelSU WebUI immersion standard
+- 🌐 WebUI used fetch API instead of curl command for network requests, improving compatibility
+- 🏗️ Modular architecture refactored Zygisk module core
+- 🎨 Optimized WebUI display and layout
+- 🏗️ Refactored WebUI template page to component-based structure
+- 🔄 Migrated C++ atexit implementation to Rust implementation
+- 📋 WebUI added configuration metadata support
+
+## ⬆️[v1.0.5 → v1.1.0] - 2025-11-09
+
+### 🆕 New Features
+- 🌐 Added WebUI interface for more friendly configuration management experience
+- ⚙️ Installation script added configuration selection feature, supporting personalized installation options
+
+### ⚡ Improvements
+- 🗺️ Optimized configuration field property mapping logic, improving configuration processing efficiency
+- 📦 Migrated to new zygisk-api-rs library and updated dependencies, compatible with more Zygisk implementations
+- 🔧 Updated Rust edition to 2024 version, utilizing latest language features
+- 📚 Optimized configuration documentation structure, improving readability and usability
+
+## ⬆️[v1.0.0 → v1.0.5] - 2025-11-04
+
+### 🆕 New Features
+- 📱 Added device template configuration for convenient application to multiple package names
+- 🔄 Added lite and full dual-mode configuration to meet different usage scenarios
+- 💾 Added module installation backup configuration mechanism for improved stability
+
+### ⚡ Improvements
+- 🚀 Optimized core performance and size for smoother operation
+- 🧩 Optimized module unloading logic, reducing residency time
+- 🎯 Used local_cxa_atexit_finalize_impl to reduce the runtime footprint

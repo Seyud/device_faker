@@ -1,0 +1,3 @@
+# Force LF line endings for shell scripts under module/
+# (CRLF breaks Magisk/KernelSU module scripts)
+module/**/*.sh text eol=lf

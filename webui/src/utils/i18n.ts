@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2025-2026 Seyud
+// Device Faker: https://github.com/Seyud/device_faker
+
 import { computed } from 'vue'
 import { useSettingsStore } from '../stores/settings'
 
@@ -38,7 +42,6 @@ export const messages = {
         module_version: '模块版本',
         impersonated_apps_count: '伪装应用数量',
         templates_count: '机型模板数量',
-        work_mode: '工作模式',
       },
       // i generated these fields with AI, if it's not right please update :)
       translators: {
@@ -54,16 +57,15 @@ export const messages = {
         module_name: '模块名称',
         author: '作者',
         communities: '社群',
+        website: '官网',
+        website_action_primary: '访问官网',
+        website_action_secondary: '文档、指南与下载',
         repository: 'GitHub 仓库',
         telegram: 'Telegram 群',
         qq_group: 'QQ群',
         open_link: '打开链接',
         repository_action_primary: '前往GitHub',
         repository_action_secondary: '给项目点个 Star',
-      },
-      mode: {
-        lite: '轻量模式',
-        full: '完整模式',
       },
     },
     templates: {
@@ -82,17 +84,25 @@ export const messages = {
         model: 'Model',
         device: 'Device',
         product: 'Product',
-        name_field: 'Name (可选，仅 full 模式)',
-        market_name: 'Market Name (可选，仅 full 模式)',
+        hardware: 'Hardware',
+        board: 'Board',
+        soc_model: 'SoC Model',
+        name_field: 'Name',
+        market_name: 'Market Name',
         fingerprint: 'Fingerprint',
         build_id: 'Build ID',
+        display_id: 'Display ID',
+        incremental: 'Build Incremental',
+        security_patch: '安全补丁日期',
         android_version: 'Android 版本',
         sdk_int: 'SDK 版本',
-        characteristics: 'Characteristics (可选，仅 full 模式)',
+        dpi: '屏幕 DPI',
+        characteristics: 'Characteristics',
         force_denylist_unmount: '强制卸载挂载点',
-        mode: '工作模式 (可选)',
         packages: '应用包名列表 (可选)',
         system: '系统',
+        companion_resetprop: 'Companion Resetprop',
+        custom_props: '自定义属性',
       },
       placeholders: {
         name: '例如：redmagic_9_pro',
@@ -101,21 +111,31 @@ export const messages = {
         model: '例如：25010PN30C，NX769J',
         device: '例如：xuanyuan，NX769J',
         product: '例如：xuanyuan，NX769J',
+        hardware: '例如：qcom, mt6989',
+        board: '例如：kalama, lahaina',
+        soc_model: '例如：SM8550，Kirin 9030',
         name_field: '例如：xuanyuan',
         market_name: '例如：REDMAGIC 9 Pro',
         fingerprint:
           '例如：nubia/NX769J/NX769J:14/UKQ1.230917.001/20240813.173312:user/release-keys',
         build_id: '例如：UKQ1.230917.001',
+        display_id: '例如：PD2546_16.0.9.400(CN01)',
+        incremental: '例如：compiler260228234011',
+        security_patch: '例如：2025-06-05',
         android_version: '例如：16, 15, 14',
         sdk_int: '例如：36, 35, 34',
-        characteristics: '例如：tablet (仅 full 模式)',
-        mode: '留空使用全局默认模式',
+        dpi: '120–640，例如：420',
+        characteristics: '例如：tablet',
         packages: '输入或搜索应用包名',
+        custom_prop_key: '属性名，例如 ro.vendor.xxx',
+        custom_prop_value: '属性值',
       },
-      options: {
-        mode_lite: 'lite - 轻量模式（推荐，隐蔽性好）',
-        mode_full: 'full - 完整模式（全面伪装，可能被检测）',
-        mode_resetprop: 'resetprop - Resetprop 模式 (支持只读属性)',
+      customProps: {
+        add: '添加属性',
+        set_empty: '置空（__EMPTY__）',
+        set_delete: '删除属性（__DELETE__）',
+        manual: '手动输入值',
+        empty: '暂无自定义属性',
       },
       empty: {
         title: '暂无机型模板',
@@ -139,8 +159,17 @@ export const messages = {
         export_copy_failed: '复制失败，请手动复制',
         pkg_exists: '该包名已添加',
       },
+      conflict: {
+        banner_title: '包名重复配置',
+        banner_desc:
+          '以下包名被多个模板同时声明，只有排在前面的模板会生效，其余被忽略。请让每个包名只挂一个模板。',
+        label: '重复包名',
+        claimed_by: '被 {names} 同时声明',
+        effective: '生效：{name}',
+        ignored: '忽略：{names}',
+        none: '没有重复配置的包名',
+      },
       labels: {
-        mode: '模式',
         packages: '应用包名',
         count_suffix: '个',
         version: '版本',
@@ -148,13 +177,8 @@ export const messages = {
         author: '作者',
         description: '描述',
       },
-      values: {
-        lite: 'lite (轻量)',
-        full: 'full (完整)',
-        resetprop: 'resetprop (Resetprop)',
-      },
       search: {
-        placeholder: '搜索模板名称、品牌或型号',
+        placeholder: '搜索模板名称、品牌、型号或描述',
         no_results: '未找到匹配的模板',
       },
       categories: {
@@ -182,7 +206,7 @@ export const messages = {
         close: '关闭',
         source_button: '模板源：{source}',
         refresh: '刷新列表',
-        search_placeholder: '搜索模板名称、品牌或分类',
+        search_placeholder: '搜索模板名称、品牌、机型或描述',
         clear_filters: '清空筛选',
         progress_label: '详情加载',
         progress_pending: '等待开始',
@@ -217,6 +241,7 @@ export const messages = {
           detail_failed: '详情加载失败',
           empty_content: '模板内容为空',
           import_failed: '导入失败',
+          rate_limited: 'API 请求频率受限，请稍后重试',
         },
         messages: {
           import_success: '模板 "{name}" 导入成功',
@@ -299,6 +324,7 @@ export const messages = {
         configured: '已配置',
         unconfigured: '未配置',
         not_installed: '未安装',
+        inherited: '继承自主应用',
       },
       empty: {
         search: '未找到匹配的应用',
@@ -318,12 +344,17 @@ export const messages = {
         remove_hint: '确定要移除该应用的伪装配置吗？',
         remove_custom_config: '移除自定义配置',
         remove_template_config: '移除模板配置',
+        inherited_hint: '该分身的配置继承自主应用 {base}；修改后会固化为该分身自己的配置。',
+        scope_user0: '生效范围：仅主应用（user 0）',
+        scope_fallback: '生效范围：主应用 + 所有分身（回退）',
+        scope_clone: '生效范围：仅分身 user {uid}',
       },
       messages: {
         select_template: '请选择模板',
         saved: '配置已保存',
         custom_config_removed: '自定义配置已移除',
         template_config_removed: '模板配置已移除',
+        inherited_config: '该配置继承自主应用 {base}，无法单独移除；保存一次即可固化为分身独立配置',
       },
     },
     settings: {
@@ -347,20 +378,13 @@ export const messages = {
       },
       module: {
         title: '模块设置',
-        default_mode: {
-          label: '默认工作模式',
-          desc: '选择模块的默认工作模式',
-          lite: '轻量模式 (推荐)',
-          full: '完整模式',
-          resetprop: 'Resetprop 模式',
-        },
         force_denylist_unmount: {
           label: '默认强制卸载挂载点',
           desc: '为目标应用启用 Zygisk 的 FORCE_DENYLIST_UNMOUNT',
         },
         debug: {
           label: '调试模式',
-          desc: '启用后可在 logcat 中查看详细日志',
+          desc: '启用后可在日志目录查看日志文件',
         },
       },
       tools: {
@@ -381,7 +405,6 @@ export const messages = {
         },
       },
       messages: {
-        default_mode_updated: '默认模式已更新',
         debug_enabled: '调试模式已启用',
         debug_disabled: '调试模式已关闭',
         read_failed: '读取文件失败或文件为空',
@@ -428,7 +451,6 @@ export const messages = {
         module_version: 'Module Version',
         impersonated_apps_count: 'Impersonated Apps',
         templates_count: 'Templates Count',
-        work_mode: 'Work Mode',
       },
       translators: {
         title: 'Translators',
@@ -443,16 +465,15 @@ export const messages = {
         module_name: 'Module Name',
         author: 'Author',
         communities: 'Communities',
+        website: 'Official Website',
+        website_action_primary: 'Open Website',
+        website_action_secondary: 'Docs, guides & downloads',
         repository: 'GitHub Repository',
         telegram: 'Telegram Group',
         qq_group: 'QQ Group',
         open_link: 'Open Link',
         repository_action_primary: 'Open GitHub',
         repository_action_secondary: 'Star the Project',
-      },
-      mode: {
-        lite: 'Lite Mode',
-        full: 'Full Mode',
       },
     },
     templates: {
@@ -471,17 +492,25 @@ export const messages = {
         model: 'Model',
         device: 'Device',
         product: 'Product',
-        name_field: 'Name (Optional, full mode only)',
-        market_name: 'Market Name (Optional, full mode only)',
+        hardware: 'Hardware',
+        board: 'Board',
+        soc_model: 'SoC Model',
+        name_field: 'Name',
+        market_name: 'Market Name',
         fingerprint: 'Fingerprint',
         build_id: 'Build ID',
+        display_id: 'Display ID',
+        incremental: 'Build Incremental',
+        security_patch: 'Security Patch',
         android_version: 'Android Version',
         sdk_int: 'SDK Version',
-        characteristics: 'Characteristics (Optional, full mode only)',
+        dpi: 'Screen DPI',
+        characteristics: 'Characteristics',
         force_denylist_unmount: 'Force Denylist Unmount',
-        mode: 'Work Mode (Optional)',
         packages: 'Packages (Optional)',
         system: 'System',
+        companion_resetprop: 'Companion Resetprop',
+        custom_props: 'Custom Properties',
       },
       placeholders: {
         name: 'e.g. redmagic_9_pro',
@@ -490,21 +519,31 @@ export const messages = {
         model: 'e.g. 25010PN30C, NX769J',
         device: 'e.g. xuanyuan, NX769J',
         product: 'e.g. xuanyuan, NX769J',
+        hardware: 'e.g. qcom, mt6989',
+        board: 'e.g. kalama, lahaina',
+        soc_model: 'e.g. SM8550, Kirin 9030',
         name_field: 'e.g. xuanyuan',
         market_name: 'e.g. REDMAGIC 9 Pro',
         fingerprint:
           'e.g. nubia/NX769J/NX769J:14/UKQ1.230917.001/20240813.173312:user/release-keys',
         build_id: 'e.g. UKQ1.230917.001',
+        display_id: 'e.g. PD2546_16.0.9.400(CN01)',
+        incremental: 'e.g. compiler260228234011',
+        security_patch: 'e.g. 2025-06-05',
         android_version: 'e.g. 16, 15, 14',
         sdk_int: 'e.g. 36, 35, 34',
-        characteristics: 'e.g. tablet (full mode only)',
-        mode: 'Leave empty to use global default',
+        dpi: '120–640, e.g. 420',
+        characteristics: 'e.g. tablet',
         packages: 'Enter or search package name',
+        custom_prop_key: 'Property name, e.g. ro.vendor.xxx',
+        custom_prop_value: 'Property value',
       },
-      options: {
-        mode_lite: 'lite - Lite Mode\n(Recommended, Stealthy)',
-        mode_full: 'full - Full Mode\n(Complete Spoofing, Detectable)',
-        mode_resetprop: 'resetprop - Resetprop Mode (Supports read-only props)',
+      customProps: {
+        add: 'Add Property',
+        set_empty: 'Set Empty (__EMPTY__)',
+        set_delete: 'Delete Property (__DELETE__)',
+        manual: 'Manual Input',
+        empty: 'No custom properties',
       },
       empty: {
         title: 'No Templates Found',
@@ -528,8 +567,17 @@ export const messages = {
         export_copy_failed: 'Copy failed, please copy manually',
         pkg_exists: 'Package already added',
       },
+      conflict: {
+        banner_title: 'Duplicate package assignments',
+        banner_desc:
+          'These packages are claimed by multiple templates. Only the template listed first takes effect; the rest are ignored. Assign each package to at most one template.',
+        label: 'Duplicated package',
+        claimed_by: 'Claimed by {names}',
+        effective: 'Effective: {name}',
+        ignored: 'Ignored: {names}',
+        none: 'No duplicated package assignments',
+      },
       labels: {
-        mode: 'Mode',
         packages: 'Packages',
         count_suffix: 'items',
         version: 'Version',
@@ -537,13 +585,8 @@ export const messages = {
         author: 'Author',
         description: 'Description',
       },
-      values: {
-        lite: 'lite (Lite)',
-        full: 'full (Full)',
-        resetprop: 'resetprop (Resetprop)',
-      },
       search: {
-        placeholder: 'Search by name, brand, or model',
+        placeholder: 'Search by name, brand, model, or description',
         no_results: 'No matching templates found',
       },
       categories: {
@@ -572,7 +615,7 @@ export const messages = {
         close: 'Close',
         source_button: 'Source: {source}',
         refresh: 'Refresh List',
-        search_placeholder: 'Search by template name, brand, or category',
+        search_placeholder: 'Search by name, brand, model, or description',
         clear_filters: 'Clear Filters',
         progress_label: 'Details Progress',
         progress_pending: 'Waiting to start',
@@ -607,6 +650,7 @@ export const messages = {
           detail_failed: 'Failed to load template detail',
           empty_content: 'Template content is empty',
           import_failed: 'Import failed',
+          rate_limited: 'API rate limit exceeded, please try again later',
         },
         messages: {
           import_success: 'Template "{name}" imported successfully',
@@ -690,6 +734,7 @@ export const messages = {
         configured: 'Configured',
         unconfigured: 'Unconfigured',
         not_installed: 'Not installed',
+        inherited: 'Inherited from base app',
       },
       empty: {
         search: 'No matching apps found',
@@ -709,12 +754,19 @@ export const messages = {
         remove_hint: 'Are you sure to remove the spoofing config for this app?',
         remove_custom_config: 'Remove Custom Config',
         remove_template_config: 'Remove Template Config',
+        inherited_hint:
+          "This clone inherits its config from the base app {base}. Any change will be pinned as this clone's own config.",
+        scope_user0: 'Applies to: base app only (user 0)',
+        scope_fallback: 'Applies to: base app + all clones (fallback)',
+        scope_clone: 'Applies to: clone user {uid} only',
       },
       messages: {
         select_template: 'Please select a template',
         saved: 'Config saved',
         custom_config_removed: 'Custom config removed',
         template_config_removed: 'Template config removed',
+        inherited_config:
+          'This config is inherited from the base app {base} and cannot be removed separately. Save once to pin an independent config for this clone',
       },
     },
     settings: {
@@ -738,20 +790,13 @@ export const messages = {
       },
       module: {
         title: 'Module Settings',
-        default_mode: {
-          label: 'Default Work Mode',
-          desc: 'Choose default work mode for module',
-          lite: 'Lite Mode (Recommended)',
-          full: 'Full Mode',
-          resetprop: 'Resetprop Mode',
-        },
         force_denylist_unmount: {
           label: 'Default Force Denylist Unmount',
           desc: 'Enable Zygisk FORCE_DENYLIST_UNMOUNT for target apps',
         },
         debug: {
           label: 'Debug Mode',
-          desc: 'Enable to see detailed logs in logcat',
+          desc: 'Enable to view log files in the log directory',
         },
       },
       tools: {
@@ -772,7 +817,6 @@ export const messages = {
         },
       },
       messages: {
-        default_mode_updated: 'Default mode updated',
         debug_enabled: 'Debug mode enabled',
         debug_disabled: 'Debug mode disabled',
         read_failed: 'Failed to read file or file is empty',
@@ -813,13 +857,12 @@ export const messages = {
       settings: 'Ayarlar',
     },
     status: {
-      title: 'Ev',
+      title: 'Ana Sayfa',
       items: {
         module_status: 'Modül Bilgisi',
         module_version: 'Modül Sürümü',
         impersonated_apps_count: 'Taklit Edilen Uygulamalar',
         templates_count: 'Şablon Sayısı',
-        work_mode: 'Çalışma Modu',
       },
       translators: {
         title: 'Çevirmenler',
@@ -834,16 +877,15 @@ export const messages = {
         module_name: 'Modül İsmi',
         author: 'Projenin Sahibi',
         communities: 'Topluluklar',
+        website: 'Resmi Web Sitesi',
+        website_action_primary: 'Web Sitesini Aç',
+        website_action_secondary: 'Belgeler, rehberler ve indirmeler',
         repository: 'GitHub Deposu',
         telegram: 'Telegram Grubu',
         qq_group: 'QQ Grubu',
         open_link: 'Bağlantıyı Aç',
         repository_action_primary: "GitHub'u Aç",
         repository_action_secondary: 'Projeye Yıldız Ver',
-      },
-      mode: {
-        lite: 'Basit Mod',
-        full: 'Tam Mod',
       },
     },
     templates: {
@@ -862,17 +904,25 @@ export const messages = {
         model: 'Model',
         device: 'Cihaz (Device)',
         product: 'Ürün (Product)',
-        name_field: 'İsim (Opsiyonel, sadece tam mod)',
-        market_name: 'Market İsmi (Opsiyonel, sadece tam mod)',
+        hardware: 'Donanım (Hardware)',
+        board: 'Kart (Board)',
+        soc_model: 'SoC Modeli (SoC Model)',
+        name_field: 'İsim',
+        market_name: 'Market İsmi',
         fingerprint: 'Parmak İzi (Fingerprint)',
         build_id: 'Yapı Kimiliği (Build ID)',
+        display_id: 'Görüntü Kimliği (Display ID)',
+        incremental: 'Build Artışı (Incremental)',
+        security_patch: 'Güvenlik Yaması (Security Patch)',
         android_version: 'Android Sürümü',
         sdk_int: 'SDK Sürümü',
-        characteristics: 'Özellikler (Opsiyonel, sadece tam mod)',
+        dpi: 'Ekran DPI',
+        characteristics: 'Özellikler',
         force_denylist_unmount: 'Denylist Bağlantısını Kaldırmaya Zorla',
-        mode: 'Çalışma Modu (Opsiyonel)',
         packages: 'Paketler (Opsiyonel)',
         system: 'Sistem',
+        companion_resetprop: 'Companion Resetprop',
+        custom_props: 'Özel Özellikler',
       },
       placeholders: {
         name: 'redmagic_9_pro vs.',
@@ -881,20 +931,30 @@ export const messages = {
         model: '25010PN30C, NX769J vs.',
         device: 'xuanyuan, NX769J vs.',
         product: 'xuanyuan, NX769J vs.',
+        hardware: 'örn. qcom, mt6989',
+        board: 'örn. kalama, lahaina',
+        soc_model: 'örn. SM8550, Kirin 9030',
         name_field: 'xuanyuan vs.',
         market_name: 'REDMAGIC 9 Pro vs.',
         fingerprint: 'nubia/NX769J/NX769J:14/UKQ1.230917.001/20240813.173312:user/release-keys vs.',
         build_id: 'UKQ1.230917.001 vs.',
+        display_id: 'PD2546_16.0.9.400(CN01) vs.',
+        incremental: 'compiler260228234011 vs.',
+        security_patch: '2025-06-05 vs.',
         android_version: '16, 15, 14 vs.',
         sdk_int: '36, 35, 34 vs.',
-        characteristics: 'tablet vs. (sadece tam mod)',
-        mode: 'Küresel varsayılanı kullanmak için boş bırakın',
+        dpi: '120–640, örn. 420',
+        characteristics: 'tablet vs.',
         packages: 'Paket adını girin veya arayın',
+        custom_prop_key: 'Özellik adı, örn. ro.vendor.xxx',
+        custom_prop_value: 'Özellik değeri',
       },
-      options: {
-        mode_lite: 'lite - Basit Mod\n(Önerilen, Sağlıklı)',
-        mode_full: 'full - Tam Mod\n(Tam Kimlik Sahtekarlığı, Tespit Edilemez)',
-        mode_resetprop: 'resetprop - Resetprop Modu (Salt okunur donanımları destekler)',
+      customProps: {
+        add: 'Özellik Ekle',
+        set_empty: 'Boş Yap (__EMPTY__)',
+        set_delete: 'Özelliği Sil (__DELETE__)',
+        manual: 'Manuel Giriş',
+        empty: 'Özel özellik yok',
       },
       empty: {
         title: 'Hiç Şablon Bulunamadı',
@@ -919,8 +979,17 @@ export const messages = {
         export_copy_failed: 'Kopyalama başarısız oldu, lütfen manuel olarak kopyalayın',
         pkg_exists: 'Paket zaten eklendi',
       },
+      conflict: {
+        banner_title: 'Yinelenen paket atamaları',
+        banner_desc:
+          'Bu paketler birden fazla şablon tarafından kullanılıyor. Yalnızca ilk şablonda geçerli olur, diğerleri yok sayılır. Her paketi en fazla bir şablona atayın.',
+        label: 'Yinelenen paket',
+        claimed_by: 'Şunlar tarafından kullanılıyor: {names}',
+        effective: 'Geçerli: {name}',
+        ignored: 'Yok sayılan: {names}',
+        none: 'Yinelenen paket ataması yok',
+      },
       labels: {
-        mode: 'Mod',
         packages: 'Paketler',
         count_suffix: 'Öğeler',
         version: 'Sürüm',
@@ -928,13 +997,8 @@ export const messages = {
         author: 'Sahip',
         description: 'Açıklama',
       },
-      values: {
-        lite: 'lite (Sade)',
-        full: 'full (Tam)',
-        resetprop: 'resetprop (Resetprop)',
-      },
       search: {
-        placeholder: 'İsme, markaya veya modele göre arayın',
+        placeholder: 'İsme, markaya, modele veya açıklamaya göre arayın',
         no_results: 'Eşleşen şablon bulunamadı.',
       },
       categories: {
@@ -963,7 +1027,7 @@ export const messages = {
         close: 'Kapat',
         source_button: 'Kaynak: {source}',
         refresh: 'Listeyi Yenile',
-        search_placeholder: 'Şablon adına, markaya veya kategoriye göre arama yapın',
+        search_placeholder: 'Şablon adı, marka, model veya açıklamaya göre arama yapın',
         clear_filters: 'Filtreleri Temizle',
         progress_label: 'İlerleme Detayı',
         progress_pending: 'Başlamayı bekliyorum',
@@ -1000,6 +1064,7 @@ export const messages = {
           detail_failed: 'Şablon detayını yükleme başarısız oldu.',
           empty_content: 'Şablon içeriği boş.',
           import_failed: 'İçe aktarma başarısız oldu.',
+          rate_limited: 'API istek sınırı aşıldı, lütfen daha sonra tekrar deneyin.',
         },
         messages: {
           import_success: '"{name}" şablonu başarıyla içe aktarıldı.',
@@ -1087,6 +1152,7 @@ export const messages = {
         configured: 'Yapılandırıldı',
         unconfigured: 'Yapılandırılmadı',
         not_installed: 'Kurulu Değil',
+        inherited: 'Ana uygulamadan devralındı',
       },
       empty: {
         search: 'Eşleşen hiçbir uygulama bulunamadı',
@@ -1107,12 +1173,19 @@ export const messages = {
           'Bu uygulama için sahtekarlık yapılandırmasını kaldırmak istediğinizden emin misiniz?',
         remove_custom_config: 'Özel Yapılandırmayı Kaldır',
         remove_template_config: 'Şablon Yapılandırmasını Kaldır',
+        inherited_hint:
+          'Bu klon yapılandırmasını {base} ana uygulamasından devralır. Yapılan değişiklikler bu klona ait ayrı bir yapılandırma olarak sabitlenir.',
+        scope_user0: 'Kapsam: yalnızca ana uygulama (user 0)',
+        scope_fallback: 'Kapsam: ana uygulama + tüm klonlar (yedek)',
+        scope_clone: 'Kapsam: yalnızca klon user {uid}',
       },
       messages: {
         select_template: 'Lütfen bir şablon seçin',
         saved: 'Yapılandırma kaydedildi',
         custom_config_removed: 'Özel yapılandırma kaldırıldı',
         template_config_removed: 'Şablon yapılandırması kaldırıldı',
+        inherited_config:
+          'Bu yapılandırma {base} ana uygulamasından devralınmıştır ve ayrı olarak kaldırılamaz. Klon için bağımsız yapılandırma sabitlemek üzere bir kez kaydedin',
       },
     },
     settings: {
@@ -1136,20 +1209,13 @@ export const messages = {
       },
       module: {
         title: 'Modül Ayarları',
-        default_mode: {
-          label: 'Varsayılan Çalışma Modu',
-          desc: 'Modül için varsayılan çalışma modunu seçin.',
-          lite: 'Basit Mod (Önerilir)',
-          full: 'Tam Mod',
-          resetprop: 'Resetprop Mod',
-        },
         force_denylist_unmount: {
           label: 'Varsayılan Denylist Listesinden Çıkarma',
           desc: 'Hedef uygulamalar için Zygisk FORCE_DENYLIST_UNMOUNT özelliğini etkinleştirin.',
         },
         debug: {
           label: 'Hata Ayıklama Modu',
-          desc: "Logcat'de detaylı günlükleri aktifleştirir.",
+          desc: 'Günlük dizinindeki günlük dosyalarını görüntülemeyi etkinleştirir.',
         },
       },
       tools: {
@@ -1170,7 +1236,6 @@ export const messages = {
         },
       },
       messages: {
-        default_mode_updated: 'Varsayılan mod güncellendi',
         debug_enabled: 'Hata ayıklama modu etkinleştirildi',
         debug_disabled: 'Hata ayıklama modu kapatıldı',
         read_failed: 'Dosya okunamadı veya dosya boş',
@@ -1208,6 +1273,14 @@ function getNestedValue(obj: unknown, path: string): string {
   }, obj) as string
 }
 
+const translationCache = new Map<string, string>()
+
+function resolveMessage(localeKey: Locale, path: string): string | null {
+  const value = getNestedValue(messages[localeKey], path)
+  // 与旧实现一致:空字符串/非字符串视为缺失
+  return typeof value === 'string' && value ? value : null
+}
+
 export function useI18n() {
   const settingsStore = useSettingsStore()
 
@@ -1224,21 +1297,38 @@ export function useI18n() {
   })
 
   function t(path: string, args?: Record<string, string | number>): string {
-    const currentMessages = messages[locale.value]
-    let value = getNestedValue(currentMessages, path)
+    const currentLocale = locale.value
 
-    if (!value) {
+    // 无插值的查询占绝大多数(每次渲染都会重复),按 locale+path 缓存,
+    // 避免列表渲染时每张卡片反复做 path.split + reduce 对象树遍历。
+    if (!args) {
+      const cacheKey = `${currentLocale}\0${path}`
+      const cached = translationCache.get(cacheKey)
+      if (cached !== undefined) {
+        return cached
+      }
+
+      const resolved = resolveMessage(currentLocale, path)
+      if (resolved === null) {
+        console.warn(`Translation missing for key: ${path}`)
+        return path
+      }
+
+      translationCache.set(cacheKey, resolved)
+      return resolved
+    }
+
+    const value = resolveMessage(currentLocale, path)
+    if (value === null) {
       console.warn(`Translation missing for key: ${path}`)
       return path
     }
 
-    if (args) {
-      Object.entries(args).forEach(([key, val]) => {
-        value = value.replace(`{${key}}`, String(val))
-      })
+    let result = value
+    for (const [key, val] of Object.entries(args)) {
+      result = result.replace(`{${key}}`, String(val))
     }
-
-    return value
+    return result
   }
 
   return {

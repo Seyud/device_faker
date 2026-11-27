@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2025-2026 Seyud
+// Device Faker: https://github.com/Seyud/device_faker
+
 mod zip_ext;
 
 use std::{
@@ -6,7 +10,7 @@ use std::{
     process::{self, Command},
 };
 
-use anyhow::Result;
+use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use fs_extra::{dir, file};
 use time::{OffsetDateTime, UtcOffset};
@@ -97,6 +101,23 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+/// 跑外部命令并在**非零退出码**时直接失败。
+///
+/// `Command::spawn()?.wait()?` 只能发现「进程起不来」；命令自己跑挂了（退出码非 0）
+/// 会被静默忽略。2026-10-30 的 CI（run 41123564715）就是这样：`cargo ndk build` 因
+/// `error[E0425]: cannot find function build_ident` 失败，退出码被丢掉，23 秒后才在
+/// `file::copy(...).unwrap()` 处 panic——日志里只剩那句 unwrap，真正的 rustc 报错被
+/// 埋在几十行 vite 输出之前，很容易误判成环境问题。
+fn run_command(command: &mut Command, what: &str) -> Result<()> {
+    let status = command
+        .status()
+        .with_context(|| format!("failed to spawn {what}"))?;
+    if !status.success() {
+        bail!("{what} failed ({status})");
+    }
+    Ok(())
+}
+
 fn build(release: bool, verbose: bool) -> Result<()> {
     let temp_dir = temp_dir(release);
 
@@ -114,40 +135,46 @@ fn build(release: bool, verbose: bool) -> Result<()> {
         cargo.arg("--verbose");
     }
 
-    cargo.spawn()?.wait()?;
-    cargo.current_dir("device_faker_cli/").spawn()?.wait()?;
+    run_command(&mut cargo, "cargo ndk build")?;
+    // TODO(remove-cli): device_faker_cli 已不随模块打包（WebUI 的「ZIP/属性 → 模板」转换
+    // 已在 utils/propsToTemplate.ts 纯前端实现，模块运行期也不需要它）。仍保留 crate 作为
+    // 开发/排障用的命令行工具（`cargo run -p device_faker_cli -- ...`）。若确认无人再用，
+    // 可整 crate 删除并一并清掉本文件的 cli_bin_path()、AGENTS.md 的 CLI 说明。
 
     // Build WebUI first so that module/webroot/ exists before copying
     build_webui()?;
 
     let module_dir = module_dir();
+    check_module_scripts_lf(&module_dir)?;
     dir::copy(
         &module_dir,
         &temp_dir,
         &dir::CopyOptions::new().overwrite(true).content_only(true),
     )
-    .unwrap();
-    fs::remove_file(temp_dir.join(".gitignore")).unwrap();
+    .with_context(|| format!("failed to copy {} into build dir", module_dir.display()))?;
+    if temp_dir.join(".gitignore").exists() {
+        fs::remove_file(temp_dir.join(".gitignore")).context("failed to drop .gitignore")?;
+    }
+    let so_source = bin_path(release);
+    if !so_source.exists() {
+        bail!(
+            "{} was not produced by the build (see the build output above)",
+            so_source.display()
+        );
+    }
     file::copy(
-        bin_path(release),
+        &so_source,
         temp_dir.join("zygisk/arm64-v8a.so"),
         &file::CopyOptions::new().overwrite(true),
     )
-    .unwrap();
-    file::copy(
-        cli_bin_path(release),
-        temp_dir.join("bin/device_faker_cli"),
-        &file::CopyOptions::new().overwrite(true),
-    )
-    .unwrap();
-
+    .context("failed to stage zygisk/arm64-v8a.so")?;
     let build_type = if release { "release" } else { "debug" };
     let package_path = Path::new("output").join(format!("device_faker-({build_type}).zip"));
 
     let local_offset = UtcOffset::from_hms(8, 0, 0).expect("UTC+8 offset should always be valid");
 
     zip_create_from_directory_with_options(&package_path, &temp_dir, |entry_path| {
-        let mut options: FileOptions<'_, ()> = FileOptions::default()
+        let mut options: FileOptions<'_, '_, ()> = FileOptions::default()
             .compression_method(CompressionMethod::Deflated)
             .compression_level(Some(9));
 
@@ -167,22 +194,25 @@ fn build(release: bool, verbose: bool) -> Result<()> {
 fn zip_entry_modified_time(entry_path: &Path, local_offset: UtcOffset) -> Option<DateTime> {
     let modified = fs::metadata(entry_path).ok()?.modified().ok()?;
     let modified = OffsetDateTime::from(modified).to_offset(local_offset);
+    // zip 9 移除了 `TryFrom<OffsetDateTime> for DateTime`，只剩 PrimitiveDateTime 版本。
+    // ZIP 条目只存墙上时间（无时区），因此取 date+time 与原语义完全一致。
+    let primitive = time::PrimitiveDateTime::new(modified.date(), modified.time());
 
-    DateTime::try_from(modified).ok()
+    DateTime::try_from(primitive).ok()
 }
 
 fn check(release: bool, verbose: bool) -> Result<()> {
-    let mut cargo = cargo_ndk();
+    // check 不需要链接，因此不需要 cargo-ndk 设置的 Android linker。
+    // 同时避免与 -Z build-std 冲突导致 duplicate core lang item。
+    let mut cargo = Command::new("cargo");
     cargo.args([
+        "+nightly",
         "check",
         "--target",
         "aarch64-linux-android",
         "-Z",
-        "build-std",
-        "-Z",
         "trim-paths",
     ]);
-    cargo.env("RUSTFLAGS", "-C default-linker-libraries");
 
     if release {
         cargo.arg("--release");
@@ -192,7 +222,7 @@ fn check(release: bool, verbose: bool) -> Result<()> {
         cargo.arg("--verbose");
     }
 
-    cargo.spawn()?.wait()?;
+    run_command(&mut cargo, "cargo ndk check")?;
 
     Ok(())
 }
@@ -201,7 +231,7 @@ fn clean() -> Result<()> {
     let temp_dir = temp_dir(false);
     let _ = fs::remove_dir_all(&temp_dir);
 
-    Command::new("cargo").arg("clean").spawn()?.wait()?;
+    run_command(Command::new("cargo").arg("clean"), "cargo clean")?;
 
     Ok(())
 }
@@ -212,7 +242,7 @@ fn format(verbose: bool) -> Result<()> {
     if verbose {
         command.arg("--verbose");
     }
-    command.spawn()?.wait()?;
+    run_command(&mut command, "cargo fmt")?;
 
     Ok(())
 }
@@ -228,23 +258,56 @@ fn lint(fix: bool) -> Result<()> {
         command
     };
 
-    command_builder(fix).spawn()?.wait()?;
-    command_builder(fix).arg("--release").spawn()?.wait()?;
+    run_command(&mut command_builder(fix), "cargo clippy")?;
+    run_command(
+        command_builder(fix).arg("--release"),
+        "cargo clippy --release",
+    )?;
 
     Ok(())
 }
 
 fn update() -> Result<()> {
-    Command::new("cargo")
-        .args(["update", "--recursive"])
-        .spawn()?
-        .wait()?;
-    Command::new("cargo")
-        .current_dir("xtask")
-        .args(["update", "--recursive"])
-        .spawn()?
-        .wait()?;
+    run_command(
+        Command::new("cargo").args(["update", "--recursive"]),
+        "cargo update",
+    )?;
+    run_command(
+        Command::new("cargo")
+            .current_dir("xtask")
+            .args(["update", "--recursive"]),
+        "cargo update (xtask)",
+    )?;
 
+    Ok(())
+}
+
+/// `.gitattributes` 的 `text eol=lf` 只在 git checkout / add 时生效；`xtask` 直接读工作区
+/// 打包，被编辑器或脚本写成 CRLF 的 `*.sh` 会原样进 zip，导致安装器 ash 解析失败
+fn check_module_scripts_lf(module_dir: &Path) -> Result<()> {
+    fn collect(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
+        for entry in fs::read_dir(dir)? {
+            let path = entry?.path();
+            if path.is_dir() {
+                collect(&path, out)?;
+            } else if path.extension().and_then(|ext| ext.to_str()) == Some("sh") {
+                out.push(path);
+            }
+        }
+        Ok(())
+    }
+
+    let mut scripts = Vec::new();
+    collect(module_dir, &mut scripts)?;
+    for script in scripts {
+        let bytes = fs::read(&script)?;
+        if bytes.windows(2).any(|window| window == b"\x0d\x0a") {
+            bail!(
+                "{} has CRLF line endings; module scripts must use LF (see .gitattributes)",
+                script.display()
+            );
+        }
+    }
     Ok(())
 }
 
@@ -265,13 +328,6 @@ fn bin_path(release: bool) -> PathBuf {
         .join("libzygisk.so")
 }
 
-fn cli_bin_path(release: bool) -> PathBuf {
-    Path::new("device_faker_cli/target")
-        .join("aarch64-linux-android")
-        .join(if release { "release" } else { "debug" })
-        .join("device_faker_cli")
-}
-
 fn cargo_ndk() -> Command {
     let mut command = Command::new("cargo");
     command
@@ -288,8 +344,8 @@ fn build_webui() -> Result<()> {
         command
     };
 
-    npm().arg("install").spawn()?.wait()?;
-    npm().args(["run", "build"]).spawn()?.wait()?;
+    run_command(npm().arg("install"), "npm install")?;
+    run_command(npm().args(["run", "build"]), "npm run build")?;
 
     Ok(())
 }

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2025-2026 Seyud
+// Device Faker: https://github.com/Seyud/device_faker
+
 use std::{
     fs::File,
     io::{Read, Write},
@@ -18,7 +22,7 @@ pub fn zip_create_from_directory_with_options<F, T>(
 ) -> ZipResult<()>
 where
     T: FileOptionExtension,
-    F: Fn(&PathBuf) -> FileOptions<T>,
+    F: Fn(&PathBuf) -> FileOptions<'_, '_, T>,
 {
     let file = File::create(archive_file)?;
     let zip_writer = ZipWriter::new(file);
@@ -32,7 +36,7 @@ fn create_from_directory_with_options<F, T>(
 ) -> ZipResult<()>
 where
     T: FileOptionExtension,
-    F: Fn(&PathBuf) -> FileOptions<T>,
+    F: Fn(&PathBuf) -> FileOptions<'_, '_, T>,
 {
     let mut paths_queue: Vec<PathBuf> = vec![];
     paths_queue.push(directory.to_path_buf());

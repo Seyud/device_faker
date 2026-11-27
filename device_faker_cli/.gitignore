@@ -1,0 +1,5 @@
+# 本机构建路径，勿提交远程
+build_config.local.toml
+
+# 独立 crate 的本地构建产物
+/target/

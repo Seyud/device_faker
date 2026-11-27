@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2025-2026 Seyud
+# Device Faker: https://github.com/Seyud/device_faker
+
 """
 Device Faker WebUI 构建脚本
 这个脚本自动化了 Vue.js 项目的常见构建任务
@@ -192,11 +196,26 @@ class WebUIBuilder:
     
     def build(self) -> bool:
         """构建生产版本"""
-        if not self._ensure_dependencies():
+        if not self.check_node_npm():
             return False
-        
+
         logger.info("开始构建生产版本...")
-        
+
+        # 步骤 0: 依赖一致性检查与安装（复现 CI 的 npm ci，提前发现 lock 不同步）
+        # CI 第 8 步用 `npm ci` 严格校验 package.json 与 package-lock.json 是否同步，
+        # 本地预先跑一遍可在提交前暴露 "Missing ... from lock file" 之类的问题。
+        logger.info("=== 依赖一致性检查 (npm ci) ===")
+        ci_check = self.run_command(
+            ["npm", "ci", "--no-audit", "--no-fund"],
+            "npm ci 依赖一致性校验",
+            use_npm=True,
+        )
+        if not ci_check:
+            logger.error("❌ 依赖一致性检查失败：package.json 与 package-lock.json 不同步")
+            logger.error("   请在 webui 目录运行 `npm install` 更新 lock 文件后再提交，避免 CI 失败")
+            return False
+        logger.info("✅ 依赖一致性检查通过")
+
         # 步骤 1: TypeScript 类型检查（强制检查，失败时停止构建）
         logger.info("=== TypeScript 类型检查 ===")
         type_check_success = self.run_command(["npm", "run", "type-check"], "TypeScript 类型检查", use_npm=True)

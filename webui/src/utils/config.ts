@@ -1,16 +1,18 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2025-2026 Seyud
+// Device Faker: https://github.com/Seyud/device_faker
+
 import type {
   AppConfig,
   Config,
   CustomProps,
   DeviceInfo,
-  SpoofMode,
+  NumericSetting,
   Template,
   TemplateMeta,
 } from '../types'
 
 type UnknownRecord = Record<string, unknown>
-
-const VALID_MODES: SpoofMode[] = ['lite', 'full', 'resetprop']
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -36,10 +38,16 @@ function asOptionalInteger(value: unknown): number | undefined {
   return value
 }
 
-function asOptionalMode(value: unknown): SpoofMode | undefined {
-  return typeof value === 'string' && VALID_MODES.includes(value as SpoofMode)
-    ? (value as SpoofMode)
-    : undefined
+/**
+ * 数值型设置：整数照常归一化；TOML 手写的 `__DELETE__` 标记原样保留
+ * （否则保存/同步配置时会静默丢掉该标记，见 docs/CONFIG.md「特殊标记值」）。
+ */
+function asOptionalNumericSetting(value: unknown): NumericSetting | undefined {
+  if (value === '__DELETE__') {
+    return value
+  }
+
+  return asOptionalInteger(value)
 }
 
 function normalizePackages(value: unknown): string[] | undefined {
@@ -89,6 +97,15 @@ function normalizeDeviceInfoFields(source: UnknownRecord): Partial<DeviceInfo> {
   const product = asOptionalString(source.product)
   if (product !== undefined) normalized.product = product
 
+  const hardware = asOptionalString(source.hardware)
+  if (hardware !== undefined) normalized.hardware = hardware
+
+  const board = asOptionalString(source.board)
+  if (board !== undefined) normalized.board = board
+
+  const socModel = asOptionalString(source.soc_model)
+  if (socModel !== undefined) normalized.soc_model = socModel
+
   const name = asOptionalString(source.name)
   if (name !== undefined) normalized.name = name
 
@@ -101,14 +118,26 @@ function normalizeDeviceInfoFields(source: UnknownRecord): Partial<DeviceInfo> {
   const buildId = asOptionalString(source.build_id)
   if (buildId !== undefined) normalized.build_id = buildId
 
+  const displayId = asOptionalString(source.display_id)
+  if (displayId !== undefined) normalized.display_id = displayId
+
+  const incremental = asOptionalString(source.incremental)
+  if (incremental !== undefined) normalized.incremental = incremental
+
+  const securityPatch = asOptionalString(source.security_patch)
+  if (securityPatch !== undefined) normalized.security_patch = securityPatch
+
   const characteristics = asOptionalString(source.characteristics)
   if (characteristics !== undefined) normalized.characteristics = characteristics
 
   const androidVersion = asOptionalString(source.android_version)
   if (androidVersion !== undefined) normalized.android_version = androidVersion
 
-  const sdkInt = asOptionalInteger(source.sdk_int)
+  const sdkInt = asOptionalNumericSetting(source.sdk_int)
   if (sdkInt !== undefined) normalized.sdk_int = sdkInt
+
+  const dpi = asOptionalInteger(source.dpi)
+  if (dpi !== undefined && dpi >= 120 && dpi <= 640) normalized.dpi = dpi
 
   const customProps = normalizeCustomProps(source.custom_props)
   if (customProps !== undefined) normalized.custom_props = customProps
@@ -116,6 +145,11 @@ function normalizeDeviceInfoFields(source: UnknownRecord): Partial<DeviceInfo> {
   const forceDenylistUnmount = asOptionalBoolean(source.force_denylist_unmount)
   if (forceDenylistUnmount !== undefined) {
     normalized.force_denylist_unmount = forceDenylistUnmount
+  }
+
+  const companionResetprop = asOptionalBoolean(source.companion_resetprop)
+  if (companionResetprop !== undefined) {
+    normalized.companion_resetprop = companionResetprop
   }
 
   return normalized
@@ -130,11 +164,6 @@ export function sanitizeTemplate(input: unknown): Template {
   const packages = normalizePackages(source.packages)
   if (packages !== undefined) {
     normalized.packages = packages
-  }
-
-  const mode = asOptionalMode(source.mode)
-  if (mode !== undefined) {
-    normalized.mode = mode
   }
 
   const meta = extractTemplateMeta(source)
@@ -158,20 +187,11 @@ export function sanitizeAppConfig(input: unknown): AppConfig | null {
     ...normalizeDeviceInfoFields(source),
   }
 
-  const mode = asOptionalMode(source.mode)
-  if (mode !== undefined) {
-    normalized.mode = mode
-  }
-
   return normalized
 }
 
 export function sanitizeConfigForSave(input: Config): Config {
   const normalized: Config = {}
-
-  if (input.default_mode && input.default_mode !== 'lite') {
-    normalized.default_mode = input.default_mode
-  }
 
   if (input.default_force_denylist_unmount === true) {
     normalized.default_force_denylist_unmount = true
@@ -214,17 +234,53 @@ export function sanitizeConfigForSave(input: Config): Config {
     }
   }
 
-  if (
-    !normalized.default_mode &&
-    !normalized.default_force_denylist_unmount &&
-    !normalized.debug &&
-    !normalized.templates &&
-    !normalized.apps
-  ) {
-    normalized.default_mode = 'lite'
-  }
-
   return normalized
+}
+
+export type TemplateEntry = { name: string; template: Template }
+
+/**
+ * 找出被多个模板同时声明的包名。
+ *
+ * 运行时（src/config.rs find_template_for_package）只取书写顺序最先的那一个模板，
+ * 其余被静默丢弃——这是「明明配了 A 机型却生效了 B 机型」的成因。
+ * 返回按包名字母序排列的条目，便于 UI 稳定展示。
+ *
+ * @param entries 模板条目，**必须按 config.toml 的书写顺序传入**（UI 顺序即运行时优先级）
+ */
+export function findConflictingPackages(
+  entries: readonly TemplateEntry[]
+): Array<{ packageName: string; templates: string[] }> {
+  const claimants = new Map<string, string[]>()
+
+  entries.forEach(({ name, template }) => {
+    for (const pkg of template.packages ?? []) {
+      const list = claimants.get(pkg)
+      if (list) {
+        // 同一模板内重复写同一个包名不算冲突
+        if (!list.includes(name)) list.push(name)
+      } else {
+        claimants.set(pkg, [name])
+      }
+    }
+  })
+
+  return Array.from(claimants.entries())
+    .filter(([, names]) => names.length > 1)
+    .map(([packageName, templates]) => ({ packageName, templates }))
+    .sort((a, b) => a.packageName.localeCompare(b.packageName))
+}
+
+/**
+ * 某个包名被哪些模板声明（按传入顺序）。长度 > 1 即为配置歧义。
+ */
+export function templatesClaimingPackage(
+  entries: readonly TemplateEntry[],
+  packageName: string
+): string[] {
+  return entries
+    .filter(({ template }) => (template.packages ?? []).includes(packageName))
+    .map(({ name }) => name)
 }
 
 export function mergeTemplateWithExisting(

@@ -1,3 +1,9 @@
+<!--
+  SPDX-License-Identifier: GPL-3.0-or-later
+  Copyright (c) 2025-2026 Seyud
+  Device Faker: https://github.com/Seyud/device_faker
+-->
+
 <template>
   <div ref="viewportRef" class="virtual-list" @scroll="handleScroll">
     <div class="virtual-spacer" :style="{ height: `${totalHeight}px` }">
@@ -72,7 +78,7 @@
           </div>
 
           <div v-else-if="entry.item.detailStatus === 'error'" class="card-body card-body--error">
-            <AlertTriangle :size="18" />
+            <TriangleAlert :size="18" />
             <p class="error-copy">
               {{ entry.item.detailError || t('templates.online.errors.detail_failed') }}
             </p>
@@ -133,7 +139,7 @@
 <script setup lang="ts">
 import { layout, prepare } from '@chenglou/pretext'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { AlertTriangle, Download, LoaderCircle, RefreshCw } from 'lucide-vue-next'
+import { Download, LoaderCircle, RefreshCw, TriangleAlert } from '@lucide/vue'
 import type { OnlineTemplateDetail, OnlineTemplateRecord, OnlineTemplateLoadState } from '../types'
 import { useI18n } from '../utils/i18n'
 

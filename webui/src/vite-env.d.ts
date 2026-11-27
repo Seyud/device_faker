@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2025-2026 Seyud
+// Device Faker: https://github.com/Seyud/device_faker
+
 /// <reference types="vite/client" />
 
 declare module '*.vue' {
@@ -6,6 +10,10 @@ declare module '*.vue' {
   const component: DefineComponent<Record<string, never>, Record<string, never>, any>
   export default component
 }
+
+// element-plus >= 2.14.0 移除了 style 子路径的 .d.ts（上游变更），
+// 为按需样式导入（message / message-box 等 style/css）补充模块声明
+declare module 'element-plus/es/components/*/style/css'
 
 interface ImportMetaEnv {
   readonly DEV: boolean
@@ -18,47 +26,8 @@ interface ImportMeta {
   readonly env: ImportMetaEnv
 }
 
-// WebUI-X 应用信息接口
-interface WXApplicationInfo {
-  getPackageName(): string
-  getName(): string | null
-  getLabel(): string | null
-  getVersionName(): string | null
-  getVersionCode(): number
-  getNonLocalizedLabel(): string | null
-  getDataDir(): string | null
-  getSourceDir(): string | null
-  getTargetSdkVersion(): number
-  getMinSdkVersion(): number
-  getUid(): number
-}
-
-// WebUI-X 文件输入流接口
-interface FileInputInterfaceStream {
-  read(): number
-  readChunk(chunkSize: number): string
-  close(): void
-  skip(n: number): number
-}
-
-// WebUI-X PackageManager 接口
-interface PackageManagerInterface {
-  getPackageUid(packageName: string, flags: number, userId: number): number
-  getApplicationIcon(
-    packageName: string,
-    flags: number,
-    userId: number
-  ): FileInputInterfaceStream | null
-  getInstalledPackages(flags: number, userId: number): string
-  getApplicationInfo(packageName: string, flags: number, userId: number): WXApplicationInfo
-}
-
 // 扩展 Window 接口
 interface Window {
-  $packageManager?: PackageManagerInterface
-  wrapInputStream?: (stream: FileInputInterfaceStream) => Promise<{
-    arrayBuffer: () => Promise<ArrayBuffer>
-  }>
   ksu?: unknown
 }
 

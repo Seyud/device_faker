@@ -1,0 +1,43 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (c) 2025-2026 Seyud
+ * Device Faker: https://github.com/Seyud/device_faker
+ */
+
+:root {
+  --vp-c-brand-1: #4f7cff;
+  --vp-c-brand-2: #6b93ff;
+  --vp-c-brand-3: #3d63e0;
+  --vp-c-brand-soft: rgba(79, 124, 255, 0.14);
+}
+
+.dark {
+  --vp-c-brand-1: #7c9dff;
+  --vp-c-brand-2: #6b93ff;
+  --vp-c-brand-3: #93b0ff;
+  --vp-c-brand-soft: rgba(79, 124, 255, 0.22);
+}
+
+.VPHero .image img.VPImage {
+  width: 256px !important;
+  height: auto !important;
+  max-width: none !important;
+  max-height: none !important;
+}
+
+@media (min-width: 640px) {
+  .VPHero .image img.VPImage {
+    width: 320px !important;
+  }
+}
+
+@media (min-width: 960px) {
+  .VPHero .image img.VPImage {
+    width: 384px !important;
+  }
+
+  .VPHero .image-bg {
+    width: 384px !important;
+    height: 384px !important;
+  }
+}

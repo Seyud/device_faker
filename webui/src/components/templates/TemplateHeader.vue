@@ -1,3 +1,9 @@
+<!--
+  SPDX-License-Identifier: GPL-3.0-or-later
+  Copyright (c) 2025-2026 Seyud
+  Device Faker: https://github.com/Seyud/device_faker
+-->
+
 <template>
   <div class="page-header">
     <h2 class="page-title">{{ t('templates.title') }}</h2>
@@ -33,7 +39,7 @@
 </template>
 
 <script setup lang="ts">
-import { ArrowLeftRight, Plus, Download, Search, X } from 'lucide-vue-next'
+import { ArrowLeftRight, Plus, Download, Search, X } from '@lucide/vue'
 import { toRefs, ref, watch } from 'vue'
 import { useI18n } from '../../utils/i18n'
 

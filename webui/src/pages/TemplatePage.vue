@@ -1,3 +1,9 @@
+<!--
+  SPDX-License-Identifier: GPL-3.0-or-later
+  Copyright (c) 2025-2026 Seyud
+  Device Faker: https://github.com/Seyud/device_faker
+-->
+
 <template>
   <div class="template-page">
     <Transition :name="viewTransitionName" @after-enter="handleViewAfterEnter">
@@ -15,6 +21,28 @@
           @open-transfer="showTransferDialog"
           @search="handleSearch"
         />
+
+        <div v-if="conflictingPackages.length > 0" class="conflict-banner">
+          <div class="conflict-banner-head">
+            <strong>{{ t('templates.conflict.banner_title') }}</strong>
+          </div>
+          <p class="conflict-banner-desc">{{ t('templates.conflict.banner_desc') }}</p>
+          <ul class="conflict-list">
+            <li v-for="conflict in conflictingPackages" :key="conflict.packageName">
+              <code class="conflict-pkg">{{ conflict.packageName }}</code>
+              <span class="conflict-effective">
+                {{ t('templates.conflict.effective', { name: conflict.templates[0] }) }}
+              </span>
+              <span class="conflict-ignored">
+                {{
+                  t('templates.conflict.ignored', {
+                    names: conflict.templates.slice(1).join(', '),
+                  })
+                }}
+              </span>
+            </li>
+          </ul>
+        </div>
 
         <TemplateList
           :entries="filteredTemplates"
@@ -52,6 +80,7 @@ import { useModalHistory } from '../composables/useModalHistory'
 import { useI18n } from '../utils/i18n'
 import { useLazyMessageBox } from '../utils/elementPlus'
 import { copyTextToClipboard, stringifyTemplatesToToml } from '../utils/templateTransfer'
+import { findConflictingPackages } from '../utils/config'
 import { toast } from 'kernelsu-alt'
 import type { Template } from '../types'
 
@@ -75,12 +104,18 @@ const viewTransitionName = ref<'template-library-forward' | 'template-library-ba
 
 const allTemplates = computed(() => configStore.templateEntries)
 
+/**
+ * 被多个模板同时声明的包名。运行时只取第一个模板，其余静默忽略
+ * —— 这是「配了三星却生效 iQOO」的根因，必须在模板页显式告警。
+ */
+const conflictingPackages = computed(() => findConflictingPackages(allTemplates.value))
+
 const filteredTemplates = computed(() => {
   if (!searchQuery.value.trim()) {
     return allTemplates.value
   }
 
-  const query = searchQuery.value.toLowerCase().trim()
+  const tokens = searchQuery.value.toLowerCase().trim().split(/\s+/).filter(Boolean)
 
   return allTemplates.value.filter(({ name, template }) => {
     const searchFields = [
@@ -91,10 +126,14 @@ const filteredTemplates = computed(() => {
       template.device || '',
       template.manufacturer || '',
       template.product || '',
+      template.board || '',
+      template.soc_model || '',
+      template.description || '',
     ]
 
-    const matches = searchFields.some((field) => field.toLowerCase().includes(query))
-    return matches
+    // 与在线模板库一致：多关键词按「全部命中」匹配，描述里的多段信息也能搜到
+    const haystack = searchFields.join(' ').toLowerCase()
+    return tokens.every((token) => haystack.includes(token))
   })
 })
 
@@ -221,6 +260,68 @@ onActivated(() => {
   width: 100%;
 }
 
+/* 包名重复配置告警：多个模板声明同一包名时只有第一个生效 */
+.conflict-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.75rem 0.875rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--el-text-color-primary, inherit);
+}
+
+.conflict-banner-head strong {
+  color: #b45309;
+}
+
+.conflict-banner-desc {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  opacity: 0.85;
+}
+
+.conflict-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.conflict-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+}
+
+.conflict-pkg {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  padding: 0.0625rem 0.3125rem;
+  border-radius: 0.25rem;
+  background: rgba(127, 127, 127, 0.15);
+}
+
+.conflict-effective {
+  color: #b45309;
+}
+
+.conflict-ignored {
+  opacity: 0.7;
+  text-decoration: line-through;
+}
+
+html.dark .conflict-banner-head strong,
+html.dark .conflict-effective {
+  color: #fbbf24;
+}
+
 .template-library-forward-enter-active,
 .template-library-forward-leave-active,
 .template-library-back-enter-active,
@@ -285,20 +386,17 @@ onActivated(() => {
 <style>
 .delete-confirm-modal {
   backdrop-filter: blur(12px) saturate(120%) !important;
-  -webkit-backdrop-filter: blur(12px) saturate(120%) !important;
   background-color: rgba(0, 0, 0, 0.15) !important;
 }
 
 .dark .delete-confirm-modal {
   backdrop-filter: blur(12px) saturate(120%) !important;
-  -webkit-backdrop-filter: blur(12px) saturate(120%) !important;
   background-color: rgba(0, 0, 0, 0.4) !important;
 }
 
 .delete-confirm-box {
   background: rgba(255, 255, 255, 0.95) !important;
   backdrop-filter: blur(40px) saturate(150%) brightness(1.1) !important;
-  -webkit-backdrop-filter: blur(40px) saturate(150%) brightness(1.1) !important;
   border: 1px solid rgba(0, 0, 0, 0.1) !important;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1) !important;
 }
@@ -306,7 +404,6 @@ onActivated(() => {
 .dark .delete-confirm-box {
   background: rgba(20, 20, 20, 0.6) !important;
   backdrop-filter: blur(40px) saturate(150%) brightness(0.9) !important;
-  -webkit-backdrop-filter: blur(40px) saturate(150%) brightness(0.9) !important;
   border: 1px solid rgba(255, 255, 255, 0.15) !important;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5) !important;
 }

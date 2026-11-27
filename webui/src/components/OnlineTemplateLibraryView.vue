@@ -1,3 +1,9 @@
+<!--
+  SPDX-License-Identifier: GPL-3.0-or-later
+  Copyright (c) 2025-2026 Seyud
+  Device Faker: https://github.com/Seyud/device_faker
+-->
+
 <template>
   <section class="online-library-view">
     <header class="library-hero">
@@ -120,7 +126,7 @@
     </section>
 
     <div v-if="onlineTemplatesStore.loadError" class="warning-banner">
-      <AlertTriangle :size="18" />
+      <TriangleAlert :size="18" />
       <p>{{ onlineTemplatesStore.loadError }}</p>
       <button class="inline-action" type="button" @click="onlineTemplatesStore.clearLoadError">
         {{ t('common.confirm') }}
@@ -185,7 +191,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import {
-  AlertTriangle,
   ArrowLeft,
   CircleAlert,
   Database,
@@ -193,8 +198,9 @@ import {
   RefreshCw,
   RotateCw,
   Search,
+  TriangleAlert,
   X,
-} from 'lucide-vue-next'
+} from '@lucide/vue'
 import OnlineTemplateVirtualList from './OnlineTemplateVirtualList.vue'
 import { useOnlineTemplatesStore } from '../stores/onlineTemplates'
 import { useI18n } from '../utils/i18n'

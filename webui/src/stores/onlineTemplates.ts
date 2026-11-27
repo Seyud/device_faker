@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2025-2026 Seyud
+// Device Faker: https://github.com/Seyud/device_faker
+
 import { defineStore } from 'pinia'
 import { computed, ref, shallowRef } from 'vue'
 import { toast } from 'kernelsu-alt'
@@ -18,6 +22,8 @@ import { useConfigStore } from './config'
 import { useSettingsStore } from './settings'
 import {
   TEMPLATE_CATEGORIES,
+  isRateLimitError,
+  loadTemplateBundle,
   loadTemplateDetails,
   loadTemplateIndex,
   type TemplateDetailLoadResult,
@@ -154,8 +160,45 @@ export const useOnlineTemplatesStore = defineStore('online-templates', () => {
     Boolean(activeSource.value && activeSource.value !== preferredSource.value)
   )
 
+  /**
+   * 详情检索用的 haystack：索引字段 + 详情里的型号/营销名/代号/厂商/作者/描述。
+   * 描述优先取模板自带的 description（聚合文件回填到索引，快照可复用），
+   * 这样即使详情还没加载完（或加载失败）也能按模板描述搜索。
+   * 预计算一次（只在目录或详情变化时重算），避免每次按键都对 700+ 条重拼字符串。
+   */
+  const searchHaystackById = computed(() => {
+    const map: Record<string, string> = {}
+
+    for (const item of indexItems.value) {
+      const detail = detailStateById.value[item.id]?.detail
+      const parts = [
+        item.name,
+        item.displayName,
+        item.brand || '',
+        item.category,
+        item.description,
+        detail?.template.model,
+        detail?.template.marketname,
+        detail?.template.device,
+        detail?.template.product,
+        detail?.template.manufacturer,
+        detail?.template.author,
+        detail?.template.description,
+        detail?.meta?.author,
+        detail?.meta?.description,
+      ]
+
+      map[item.id] = parts
+        .filter((part): part is string => Boolean(part))
+        .join(' ')
+        .toLowerCase()
+    }
+
+    return map
+  })
+
   const filteredIndexItems = computed(() => {
-    const needle = keyword.value.trim().toLowerCase()
+    const tokens = keyword.value.trim().toLowerCase().split(/\s+/).filter(Boolean)
 
     return indexItems.value.filter((item) => {
       if (selectedCategory.value !== 'all' && item.category !== selectedCategory.value) {
@@ -166,12 +209,14 @@ export const useOnlineTemplatesStore = defineStore('online-templates', () => {
         return false
       }
 
-      if (!needle) {
+      if (tokens.length === 0) {
         return true
       }
 
-      const fields = [item.name, item.displayName, item.brand || '', item.category]
-      return fields.some((field) => field.toLowerCase().includes(needle))
+      const haystack = searchHaystackById.value[item.id] || ''
+      // 多关键词（空白分隔）按「全部命中」匹配：描述常是多段自由文本，
+      // 例如“拼多多 / 企业微信 平板模式”可以用「拼多多 平板」搜到。
+      return tokens.every((token) => haystack.includes(token))
     })
   })
 
@@ -526,6 +571,74 @@ export const useOnlineTemplatesStore = defineStore('online-templates', () => {
     return currentDetailsPromise
   }
 
+  /**
+   * 用聚合文件（dist/templates.toml）一次性补齐全部详情。
+   *
+   * 聚合文件是「一模板一文件」的机械拼接（结构与单个模板一致），所以这里不需要任何新 schema；
+   * 成功时把所有命中条目的详情置为 ready，并让它们共用 bundle 的 blob sha 作为缓存版本
+   * （这样快照缓存回填时 version 与 item.sha 自洽，不会每次打开都重拉）。
+   * 失败/缺失返回 false，调用方退回逐文件加载。
+   */
+  async function seedDetailsFromBundle(
+    items: OnlineTemplateIndexItem[],
+    source: OnlineTemplateSource,
+    bundleSha: string,
+    signal?: AbortSignal
+  ): Promise<boolean> {
+    let bundle: Map<string, OnlineTemplateDetail>
+
+    try {
+      bundle = await loadTemplateBundle(source, signal)
+    } catch {
+      return false
+    }
+
+    const timestamp = Date.now()
+    const next: Record<string, OnlineTemplateDetailState> = { ...detailStateById.value }
+    let seeded = 0
+
+    for (const item of items) {
+      const detail = bundle.get(item.name)
+      if (!detail) {
+        continue
+      }
+
+      next[item.id] = {
+        status: 'ready',
+        detail,
+        error: null,
+        updatedAt: timestamp,
+        version: bundleSha,
+      }
+      seeded += 1
+    }
+
+    if (seeded === 0) {
+      return false
+    }
+
+    detailStateById.value = next
+    indexItems.value = items.map((item) => {
+      const detail = bundle.get(item.name)
+      if (!detail) {
+        return item
+      }
+
+      const description = detail.meta?.description ?? detail.template.description
+      return {
+        ...item,
+        sha: bundleSha,
+        ...(description ? { description } : {}),
+      }
+    })
+    indexById.value = buildIndexMap(indexItems.value)
+    recomputeProgress()
+    updateDetailsStatus()
+    persistReadyDetails(source)
+
+    return true
+  }
+
   function hydrateFromSnapshot(): boolean {
     if (indexItems.value.length > 0) {
       return true
@@ -611,18 +724,35 @@ export const useOnlineTemplatesStore = defineStore('online-templates', () => {
         recomputeProgress()
         updateDetailsStatus()
         resetBrandFilterIfNeeded()
-        writeSnapshotCache(result.source, result.items)
         queueDetailCachePersist(result.source)
 
         const pendingItems = getPendingDetailItems(result.items)
-        if (pendingItems.length > 0) {
-          await loadDetailBatch(pendingItems, result.source)
-        } else {
+        if (pendingItems.length === 0) {
           detailsStatus.value = 'complete'
+        } else if (
+          result.bundleSha &&
+          (await seedDetailsFromBundle(result.items, result.source, result.bundleSha))
+        ) {
+          // 聚合文件命中：详情一次到位；个别不在 bundle 里的条目再走逐文件路径
+          const leftovers = getPendingDetailItems(result.items)
+          if (leftovers.length > 0) {
+            await loadDetailBatch(leftovers, result.source)
+          } else {
+            detailsStatus.value = 'complete'
+          }
+        } else {
+          await loadDetailBatch(pendingItems, result.source)
         }
+
+        // 详情加载/聚合回填之后再写快照：聚合路径会把条目的 sha 改写成 bundle 的 blob sha，
+        // 快照必须存改写后的版本，否则下次打开时缓存校验必然失配、每次都要重拉。
+        writeSnapshotCache(result.source, indexItems.value)
       } catch (error) {
-        const message =
-          error instanceof Error ? error.message : t('templates.online.errors.load_failed')
+        const message = isRateLimitError(error)
+          ? t('templates.online.errors.rate_limited')
+          : error instanceof Error
+            ? error.message
+            : t('templates.online.errors.load_failed')
 
         if (indexItems.value.length === 0) {
           indexStatus.value = 'error'
@@ -657,7 +787,9 @@ export const useOnlineTemplatesStore = defineStore('online-templates', () => {
     if (activeSource.value) {
       const pendingItems = getPendingDetailItems()
       if (pendingItems.length > 0) {
-        void loadDetailBatch(pendingItems, activeSource.value)
+        // 详情有缺口（首次使用 / 上游更新 / 换了源）：走一次目录刷新，让聚合文件一次补齐；
+        // 若上游没有聚合文件，refreshCatalog 内部会退回逐文件加载（与旧行为一致）。
+        void refreshCatalog({ background: true })
       }
     }
 

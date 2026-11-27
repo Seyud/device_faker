@@ -1,3 +1,9 @@
+<!--
+  SPDX-License-Identifier: GPL-3.0-or-later
+  Copyright (c) 2025-2026 Seyud
+  Device Faker: https://github.com/Seyud/device_faker
+-->
+
 <template>
   <el-dialog
     v-model="visible"
@@ -197,16 +203,14 @@ import { toast } from 'kernelsu-alt'
 import { useConfigStore } from '../../stores/config'
 import { useI18n } from '../../utils/i18n'
 import { useLazyMessageBox } from '../../utils/elementPlus'
-import { execCommand, readFile } from '../../utils/ksu'
+import { execCommand } from '../../utils/ksu'
 import {
   copyTextToClipboard,
-  createDeviceTempPath,
-  dumpCurrentDeviceToToml,
   parseFirstTemplateFromToml,
   parseTemplatesFromToml,
-  shellQuote,
   stringifyTemplatesToToml,
 } from '../../utils/templateTransfer'
+import { convertPropertyTextToTemplate } from '../../utils/propsToTemplate'
 import type { Template } from '../../types'
 
 type TransferTab = 'import' | 'export' | 'device'
@@ -417,24 +421,23 @@ async function loadCurrentDevice() {
   }
 
   deviceLoading.value = true
-  const tempOutputPath = createDeviceTempPath('device_faker_dump_device', '.toml')
 
   try {
-    let outputContent = ''
+    let templateData: Template
+    let defaultName: string
 
     if (import.meta.env?.DEV) {
       const { mockConfig } = await import('../../utils/mockData')
-      outputContent = mockConfig
+      ;({ templateData, defaultName } = parseFirstTemplateFromToml(mockConfig))
     } else {
-      await dumpCurrentDeviceToToml(tempOutputPath)
-      outputContent = await readFile(tempOutputPath)
+      // 直接读 getprop 输出在前端转换：不再需要临时文件与 device_faker_cli
+      const output = await execCommand('getprop')
+      if (!output.trim()) {
+        throw new Error(t('settings.messages.read_failed'))
+      }
+      ;({ template: templateData, name: defaultName } = convertPropertyTextToTemplate(output))
     }
 
-    if (!outputContent.trim()) {
-      throw new Error(t('settings.messages.read_failed'))
-    }
-
-    const { templateData, defaultName } = parseFirstTemplateFromToml(outputContent)
     deviceTemplate.value = templateData
     deviceTemplateName.value = defaultName
     toast(t('templates.transfer.device.read_success'))
@@ -443,7 +446,6 @@ async function loadCurrentDevice() {
     toast(`${t('templates.transfer.device.read_failed')}: ${message}`)
   } finally {
     deviceLoading.value = false
-    await execCommand(`rm -f ${shellQuote(tempOutputPath)}`).catch(() => {})
   }
 }
 
@@ -708,85 +710,17 @@ watch(templateEntries, () => {
 }
 </style>
 
-<style scoped>
-.template-transfer-dialog :deep(.el-dialog) {
-  margin-top: 5vh !important;
-  margin-bottom: 80px !important;
-  max-height: calc(100vh - 80px - 10vh) !important;
-  display: flex;
-  flex-direction: column;
-  background: rgba(255, 255, 255, 0.15) !important;
-  backdrop-filter: blur(40px) saturate(150%) brightness(1.1);
-  -webkit-backdrop-filter: blur(40px) saturate(150%) brightness(1.1);
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
-}
-
-@media (prefers-color-scheme: dark) {
-  .template-transfer-dialog :deep(.el-dialog) {
-    background: rgba(20, 20, 20, 0.6) !important;
-    backdrop-filter: blur(40px) saturate(150%) brightness(0.9);
-    -webkit-backdrop-filter: blur(40px) saturate(150%) brightness(0.9);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-  }
-}
-
-.template-transfer-dialog :deep(.el-dialog__body) {
-  flex: 1;
-  overflow-y: auto;
-  padding: 1.5rem;
-  background: transparent;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-.template-transfer-dialog :deep(.el-dialog__body::-webkit-scrollbar) {
-  display: none;
-}
-
-.template-transfer-dialog :deep(.el-dialog__header) {
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-@media (prefers-color-scheme: dark) {
-  .template-transfer-dialog :deep(.el-dialog__header) {
-    background: rgba(0, 0, 0, 0.2);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  }
-}
-
-.template-transfer-dialog :deep(.el-dialog__footer) {
-  padding: 1rem 1.5rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  flex-shrink: 0;
-}
-
-@media (prefers-color-scheme: dark) {
-  .template-transfer-dialog :deep(.el-dialog__footer) {
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(0, 0, 0, 0.3);
-  }
-}
-</style>
+<style scoped></style>
 
 <style>
 .template-transfer-dialog-modal {
   backdrop-filter: blur(12px) saturate(120%) !important;
-  -webkit-backdrop-filter: blur(12px) saturate(120%) !important;
   background-color: rgba(0, 0, 0, 0.25) !important;
 }
 
 @media (prefers-color-scheme: dark) {
   .template-transfer-dialog-modal {
     backdrop-filter: blur(12px) saturate(120%) !important;
-    -webkit-backdrop-filter: blur(12px) saturate(120%) !important;
     background-color: rgba(0, 0, 0, 0.4) !important;
   }
 }

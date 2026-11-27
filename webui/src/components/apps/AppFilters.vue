@@ -1,3 +1,9 @@
+<!--
+  SPDX-License-Identifier: GPL-3.0-or-later
+  Copyright (c) 2025-2026 Seyud
+  Device Faker: https://github.com/Seyud/device_faker
+-->
+
 <template>
   <div class="page-header">
     <div class="page-header-top">
@@ -138,6 +144,8 @@ const toggleSystemApps = () => emit('update:showSystemApps', !props.showSystemAp
   display: flex;
   gap: 0.5rem;
   padding-bottom: 0.5rem;
+  /* 宽屏下两个 tab 各自 flex:1 会被拉到近 500px 宽，这里限宽保持分段控件的观感 */
+  max-width: 32rem;
 }
 
 .filter-tab {

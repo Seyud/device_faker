@@ -1,25 +1,14 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2025-2026 Seyud
+// Device Faker: https://github.com/Seyud/device_faker
+
 import { nextTick, ref } from 'vue'
-import { wrapInputStream } from 'webuix'
-import { normalizePackageName } from '../utils/package'
+import { parsePackageUser } from '../utils/package'
 
 const ICON_CONTAINER_SELECTOR = '.app-icon-container'
 
 type IconMap = Record<string, string>
 type IconLoadedMap = Record<string, boolean>
-
-async function loadWrapInputStream() {
-  // 优先使用 webuix 库的 wrapInputStream
-  if (typeof window.wrapInputStream === 'undefined') {
-    window.wrapInputStream = wrapInputStream
-  }
-}
-
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const uint8Array = new Uint8Array(buffer)
-  let binary = ''
-  uint8Array.forEach((byte) => (binary += String.fromCharCode(byte)))
-  return btoa(binary)
-}
 
 export function useAppIcons() {
   const appIcons = ref<IconMap>({})
@@ -38,35 +27,10 @@ export function useAppIcons() {
   const loadAppIcon = async (packageName: string) => {
     if (appIcons.value[packageName]) return
 
-    const normalizedPackage = normalizePackageName(packageName)
+    const { base: normalizedPackage } = parsePackageUser(packageName)
 
     try {
-      if (typeof window.$packageManager !== 'undefined') {
-        const pm = window.$packageManager
-
-        try {
-          const stream = pm.getApplicationIcon(normalizedPackage, 0, 0)
-          if (!stream) {
-            appIcons.value[packageName] = 'fallback'
-            return
-          }
-
-          await loadWrapInputStream()
-          const wrapInputStream = window.wrapInputStream
-
-          if (wrapInputStream) {
-            const wrapped = await wrapInputStream(stream)
-            const buffer = await wrapped.arrayBuffer()
-            const base64 = arrayBufferToBase64(buffer)
-            appIcons.value[packageName] = `data:image/png;base64,${base64}`
-            return
-          }
-        } catch {
-          // ignore and fallback
-        }
-      }
-
-      // Check for KSU API
+      // KernelSU 原生图标协议（APK 设备级存在，用 base 名即可）
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       if (typeof (globalThis as any).ksu?.getPackagesInfo !== 'undefined') {
         appIcons.value[packageName] = `ksu://icon/${normalizedPackage}`

@@ -1,22 +1,26 @@
-use std::ffi::{CStr, CString};
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2025-2026 Seyud
+// Device Faker: https://github.com/Seyud/device_faker
 
 use anyhow::Context;
 use jni::{
     Env, EnvUnowned, jni_sig, jni_str,
-    objects::{JClass, JString, JValue},
+    objects::{JClass, JValue},
     strings::JNIStr,
-    sys::JNINativeMethod,
-};
-use zygisk_api::api::{V4, ZygiskApi};
-
-use crate::{
-    config::MergedAppConfig,
-    state::{FAKE_PROPS, ORIGINAL_NATIVE_GET, OriginalNativeGet},
 };
 
-static mut ORIGINAL_SYSTEM_PROPERTY_GET: Option<
-    unsafe extern "C" fn(*const libc::c_char, *mut libc::c_char) -> libc::c_int,
-> = None;
+use crate::config::{MergedAppConfig, NumberSetting};
+
+/// Build 字段的有效伪装值：与 config::field_value 相同的归一化——
+/// 未设置/空串/`__DELETE__` 返回 None（跳过 hook），`__EMPTY__` 归一化为空串。
+fn field_str(field: &Option<String>) -> Option<&str> {
+    match field.as_deref() {
+        Some(value) if !value.is_empty() && value != "__DELETE__" => {
+            Some(if value == "__EMPTY__" { "" } else { value })
+        }
+        _ => None,
+    }
+}
 
 /// 根据合并配置 Hook android.os.Build 的静态字段。
 pub fn hook_build_fields(
@@ -26,52 +30,62 @@ pub fn hook_build_fields(
     env.with_env(|jenv| -> Result<(), jni::errors::Error> {
         let build_class = jenv.find_class(jni_str!("android/os/Build"))?;
 
-        if let Some(manufacturer) = &merged_config.manufacturer
-            && !manufacturer.is_empty()
-        {
+        if let Some(manufacturer) = field_str(&merged_config.manufacturer) {
             set_build_field(jenv, &build_class, jni_str!("MANUFACTURER"), manufacturer)
                 .map_err(|_e| jni::errors::Error::JniCall(jni::errors::JniError::Unknown))?;
         }
 
-        if let Some(brand) = &merged_config.brand
-            && !brand.is_empty()
-        {
+        if let Some(brand) = field_str(&merged_config.brand) {
             set_build_field(jenv, &build_class, jni_str!("BRAND"), brand)
                 .map_err(|_e| jni::errors::Error::JniCall(jni::errors::JniError::Unknown))?;
         }
 
-        if let Some(model) = &merged_config.model
-            && !model.is_empty()
-        {
+        if let Some(model) = field_str(&merged_config.model) {
             set_build_field(jenv, &build_class, jni_str!("MODEL"), model)
                 .map_err(|_e| jni::errors::Error::JniCall(jni::errors::JniError::Unknown))?;
         }
 
-        if let Some(device) = &merged_config.device
-            && !device.is_empty()
-        {
+        if let Some(device) = field_str(&merged_config.device) {
             set_build_field(jenv, &build_class, jni_str!("DEVICE"), device)
                 .map_err(|_e| jni::errors::Error::JniCall(jni::errors::JniError::Unknown))?;
         }
 
-        if let Some(product) = &merged_config.product
-            && !product.is_empty()
-        {
+        if let Some(product) = field_str(&merged_config.product) {
             set_build_field(jenv, &build_class, jni_str!("PRODUCT"), product)
                 .map_err(|_e| jni::errors::Error::JniCall(jni::errors::JniError::Unknown))?;
         }
 
-        if let Some(fingerprint) = &merged_config.fingerprint
-            && !fingerprint.is_empty()
-        {
+        // HARDWARE 字段
+        if let Some(hardware) = field_str(&merged_config.hardware) {
+            set_build_field(jenv, &build_class, jni_str!("HARDWARE"), hardware)
+                .map_err(|_e| jni::errors::Error::JniCall(jni::errors::JniError::Unknown))?;
+        }
+
+        // BOARD 字段
+        if let Some(board) = field_str(&merged_config.board) {
+            set_build_field(jenv, &build_class, jni_str!("BOARD"), board)
+                .map_err(|_e| jni::errors::Error::JniCall(jni::errors::JniError::Unknown))?;
+        }
+
+        // SOC_MODEL 字段（API 29+ 存在；Build.SOC_MODEL 的属性来源是 ro.soc.model）
+        if let Some(soc_model) = field_str(&merged_config.soc_model) {
+            set_build_field(jenv, &build_class, jni_str!("SOC_MODEL"), soc_model)
+                .map_err(|_e| jni::errors::Error::JniCall(jni::errors::JniError::Unknown))?;
+        }
+
+        if let Some(fingerprint) = field_str(&merged_config.fingerprint) {
             set_build_field(jenv, &build_class, jni_str!("FINGERPRINT"), fingerprint)
                 .map_err(|_e| jni::errors::Error::JniCall(jni::errors::JniError::Unknown))?;
         }
 
-        if let Some(build_id) = &merged_config.build_id
-            && !build_id.is_empty()
-        {
+        if let Some(build_id) = field_str(&merged_config.build_id) {
             set_build_field(jenv, &build_class, jni_str!("ID"), build_id)
+                .map_err(|_e| jni::errors::Error::JniCall(jni::errors::JniError::Unknown))?;
+        }
+
+        // Build.DISPLAY 的属性来源是 ro.build.display.id（单一属性，无分区副本）
+        if let Some(display_id) = field_str(&merged_config.display_id) {
+            set_build_field(jenv, &build_class, jni_str!("DISPLAY"), display_id)
                 .map_err(|_e| jni::errors::Error::JniCall(jni::errors::JniError::Unknown))?;
         }
 
@@ -93,14 +107,30 @@ fn hook_version_fields(
         .find_class(jni_str!("android/os/Build$VERSION"))
         .context("Failed to find Build.VERSION class")?;
 
-    if let Some(android_version) = &merged_config.android_version
-        && !android_version.is_empty()
-    {
+    if let Some(android_version) = field_str(&merged_config.android_version) {
         set_build_field(env, &version_class, jni_str!("RELEASE"), android_version)?;
     }
 
-    if let Some(sdk_int) = merged_config.sdk_int {
+    // `__DELETE__`（NumberSetting::Delete）不 hook 该字段：与字符串字段的
+    // `__DELETE__` 语义一致——只由 delete_props 列表在 companion 侧删除属性，
+    // Java 层字段保持系统原值。
+    if let Some(sdk_int) = merged_config.sdk_int.and_then(NumberSetting::value) {
         set_build_int_field(env, &version_class, jni_str!("SDK_INT"), sdk_int as i32)?;
+    }
+
+    // Build.VERSION.INCREMENTAL 的属性来源是 ro.build.version.incremental
+    if let Some(incremental) = field_str(&merged_config.incremental) {
+        set_build_field(env, &version_class, jni_str!("INCREMENTAL"), incremental)?;
+    }
+
+    // Build.VERSION.SECURITY_PATCH 的属性来源是 ro.build.version.security_patch
+    if let Some(security_patch) = field_str(&merged_config.security_patch) {
+        set_build_field(
+            env,
+            &version_class,
+            jni_str!("SECURITY_PATCH"),
+            security_patch,
+        )?;
     }
 
     Ok(())
@@ -143,128 +173,6 @@ fn set_build_int_field(
 
     env.set_static_field(build_class, field_name, jni_sig!("I"), JValue::Int(value))
         .with_context(|| "Failed to set field".to_string())?;
-
-    Ok(())
-}
-
-/// Hook SystemProperties.native_get 以截获属性查询。
-pub fn hook_system_properties(api: &mut ZygiskApi<V4>, env: &mut EnvUnowned) -> anyhow::Result<()> {
-    let mut methods = [JNINativeMethod {
-        name: c"native_get".as_ptr().cast_mut(),
-        signature: c"(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;"
-            .as_ptr()
-            .cast_mut(),
-        fnPtr: native_get_hook as *mut std::ffi::c_void,
-    }];
-
-    let class_name = unsafe { JNIStr::from_ptr(c"android/os/SystemProperties".as_ptr()) };
-
-    // Use with_env to get a proper Env reference and convert to EnvUnowned
-    env.with_env(|jenv| -> Result<(), jni::errors::Error> {
-        let env_unowned = unsafe { EnvUnowned::from_raw(jenv.get_raw()) };
-        unsafe {
-            api.hook_jni_native_methods(env_unowned, class_name, &mut methods);
-        }
-        Ok(())
-    })
-    .resolve::<jni::errors::ThrowRuntimeExAndDefault>();
-
-    let original_fn_ptr = unsafe {
-        std::mem::transmute::<*mut std::ffi::c_void, OriginalNativeGet>(methods[0].fnPtr)
-    };
-    *ORIGINAL_NATIVE_GET.lock().unwrap() = Some(original_fn_ptr);
-
-    Ok(())
-}
-
-/// 为 Hook 提供的 SystemProperties.native_get 替身实现。
-pub unsafe extern "C" fn native_get_hook(
-    env: *mut jni::sys::JNIEnv,
-    class: jni::sys::jclass,
-    key: jni::sys::jstring,
-    def: jni::sys::jstring,
-) -> jni::sys::jstring {
-    let mut env_wrapper = unsafe { EnvUnowned::from_raw(env) };
-
-    let result = env_wrapper.with_env(|jenv| -> Result<jni::sys::jstring, jni::errors::Error> {
-        let key_jstring = unsafe { JString::from_raw(jenv, key) };
-        let key_string = match key_jstring.mutf8_chars(jenv) {
-            Ok(s) => s.to_string(),
-            Err(_) => return Ok(def),
-        };
-
-        let fake_props = FAKE_PROPS.lock().unwrap();
-        if let Some(fake_value) = fake_props.get(&key_string)
-            && let Ok(new_string) = jenv.new_string(fake_value)
-        {
-            return Ok(new_string.into_raw());
-        }
-
-        let original_native_get = ORIGINAL_NATIVE_GET.lock().unwrap();
-        if let Some(orig_fn) = *original_native_get {
-            return Ok(unsafe { orig_fn(env, class, key, def) });
-        }
-
-        Ok(def)
-    });
-
-    result.resolve::<jni::errors::ThrowRuntimeExAndDefault>()
-}
-
-unsafe extern "C" fn my_system_property_get(
-    name: *const libc::c_char,
-    value: *mut libc::c_char,
-) -> libc::c_int {
-    if name.is_null() || value.is_null() {
-        return 0;
-    }
-
-    let name_str = match unsafe { CStr::from_ptr(name).to_str() } {
-        Ok(s) => s,
-        Err(_) => return 0,
-    };
-
-    let result = {
-        let fake_props = FAKE_PROPS.lock().unwrap();
-        fake_props.get(name_str).map(|fake_value| {
-            let len = std::cmp::min(fake_value.len(), 91);
-            unsafe {
-                std::ptr::copy(fake_value.as_ptr() as *const libc::c_char, value, len);
-                value.add(len).write(b'\0');
-            }
-            len as libc::c_int
-        })
-    };
-
-    if let Some(len) = result {
-        return len;
-    }
-
-    unsafe {
-        if let Some(orig_fn) = ORIGINAL_SYSTEM_PROPERTY_GET {
-            return orig_fn(name, value);
-        }
-    }
-
-    0
-}
-
-pub fn hook_native_property_get(api: &mut ZygiskApi<V4>) -> anyhow::Result<()> {
-    let symbol = CString::new("__system_property_get").unwrap();
-    #[allow(clippy::missing_transmute_annotations)]
-    unsafe {
-        let mut original: *const () = std::ptr::null();
-        api.plt_hook_register(
-            0,
-            0,
-            symbol,
-            my_system_property_get as *const (),
-            &mut original,
-        );
-        let _ = api.plt_hook_commit();
-
-        ORIGINAL_SYSTEM_PROPERTY_GET = Some(std::mem::transmute(original));
-    }
 
     Ok(())
 }

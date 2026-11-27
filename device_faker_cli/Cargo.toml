@@ -1,6 +1,6 @@
 [package]
 name = "device_faker_cli"
-version = "1.4.0"
+version = "1.6.0"
 edition = "2024"
 authors = ["Seyud"]
 
@@ -10,7 +10,7 @@ argh = "0.1.19"
 serde = { version = "1.0.228", features = ["derive"] }
 toml = { version = "1.0", features = ["display", "parse"] }
 walkdir = "2.5.0"
-zip = { version = "8.2.0", default-features = false, features = ["deflate"] }
+zip = { version = "9.0.1", default-features = false, features = ["deflate"] }
 
 [profile.release]
 panic = "abort"

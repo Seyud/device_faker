@@ -4,7 +4,7 @@ exclude = ["device_faker_cli"]
 
 [package]
 name = "device_faker"
-version = "1.4.0"
+version = "1.7.0"
 edition = "2024"
 authors = ["Seyud"]
 
@@ -13,18 +13,26 @@ anyhow = { version = "1.0.102", default-features = false }
 jni = { version = "0.22", default-features = false }
 log = { version = "^0.4", default-features = false }
 serde = { version = "1.0.228", features = ["derive", "std"] }
-toml = { version = "1.0", features = ["parse"] }
+# preserve_order：templates 表按 config.toml 的书写顺序解析（底层 IndexMap），
+# 使「同一包名被多个模板声明」时命中结果确定（书写顺序靠前者胜），
+# 而不是 Rust HashMap 的进程级随机迭代顺序。
+toml = { version = "1.0", features = ["parse", "preserve_order"] }
+indexmap = { version = "2.13", features = ["serde"] }
 zygisk-api = { git = "https://github.com/Seyud/zygisk-api-rs.git" }
 serde_json = "1.0.149"
 libc = "0.2"
-prop-rs-android = { git = "https://github.com/Kernel-SU/ksu_props.git", version = "0.1.0" }
+prop-rs-android = { git = "https://github.com/KernelSU2/ksu_props", rev = "ddb6ee7294467f7f25bad2118e9e24eee104144b" }
+memmap2 = "0.9.11"
+# 前台 UidObserver：root binder 注册 ActivityManager.registerUidObserver，
+# 事件驱动接收 PROCESS_STATE_TOP 变化。
+rsbinder = { version = "0.11", features = ["android_10_plus"] }
+
+[build-dependencies]
+rsbinder-aidl = "0.11"
 
 [lib]
 name = "zygisk"
 crate-type = ["cdylib"]
-
-[target.'cfg(target_os = "android")'.dependencies]
-android_logger = "^0.15.1"
 
 [profile.release]
 panic = "abort"
@@ -33,5 +41,3 @@ opt-level = 3
 strip = true
 codegen-units = 1
 overflow-checks = false
-
-

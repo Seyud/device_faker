@@ -1,9 +1,13 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2025-2026 Seyud
+// Device Faker: https://github.com/Seyud/device_faker
+
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Config, Template, AppConfig } from '../types'
-import { readFile, writeFile, fileExists, mkdir } from '../utils/ksu'
+import { readFile, writeFile, fileExists, mkdir, getModuleInfo } from '../utils/ksu'
 import { parse as parseToml, stringify as stringifyToml } from 'smol-toml'
-import { normalizePackageName } from '../utils/package'
+import { anyConfigApplies, resolvePackageConfig, resolvePackageMatches } from '../utils/package'
 import { toast } from 'kernelsu-alt'
 import { useI18n } from '../utils/i18n'
 import {
@@ -13,12 +17,30 @@ import {
 } from '../utils/config'
 
 const CONFIG_PATH = '/data/adb/device_faker/config/config.toml'
-const MODULE_PROP_PATH = '/data/adb/modules/device_faker/module.prop'
+/**
+ * module.prop 的兜底位置（宿主没有 `ksu.moduleInfo()` 时用）。
+ *
+ * 正常情况下路径由 `ksu.moduleInfo().moduleDir` 给出：模块目录名取决于安装方式
+ * （Magisk/KernelSU 装到 `/data/adb/modules/<目录名>`，未重启的新版模块在
+ * `/data/adb/modules_update/<目录名>`），目录名与 module.prop 里的 `id` 不保证
+ * 相同，硬编码 `device_faker` 会在这些情况下读到不存在的文件。
+ */
+const MODULE_PROP_FALLBACK_PATHS = [
+  '/data/adb/modules/device_faker/module.prop',
+  '/data/adb/modules_update/device_faker/module.prop',
+]
 const CONFIG_BACKUP_KEY = 'device_faker_config_backup_v1'
+
+/** 解析 module.prop 的键值行（`key=value`，忽略注释与空行）。 */
+function parseModulePropValue(content: string, key: string): string {
+  const match = content.match(new RegExp(`^${key}=(.+)$`, 'm'))
+  return match ? match[1].trim() : ''
+}
 
 export const useConfigStore = defineStore('config', () => {
   const config = ref<Config>({})
-  const moduleVersion = ref('0.0.0')
+  // 未知时留空，由 UI 渲染成 `--`（避免把"没读到"显示成假的 0.0.0）
+  const moduleVersion = ref('')
   const moduleAuthor = ref('Seyud')
   const loading = ref(false)
   const error = ref<string | null>(null)
@@ -68,9 +90,7 @@ export const useConfigStore = defineStore('config', () => {
       if (!exists && (!content || content.trim().length === 0)) {
         // 创建默认配置
         await mkdir('/data/adb/device_faker/config')
-        config.value = {
-          default_mode: 'lite',
-        }
+        config.value = {}
         rebuildTemplateOrder()
         await saveConfig()
         return
@@ -104,9 +124,10 @@ export const useConfigStore = defineStore('config', () => {
     try {
       const configToSave = sanitizeConfigForSave(config.value)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const content = stringifyToml(configToSave as any)
+      let content = stringifyToml(configToSave as any)
       if (!content || content.trim().length === 0) {
-        throw new Error(t('config.empty_content'))
+        // 空配置也需保持文件非空（写后校验与下次加载都按内容非空判断），用注释占位，不写任何键
+        content = '# 空配置，全部使用模块默认值\n'
       }
 
       await writeFile(CONFIG_PATH, content)
@@ -128,19 +149,36 @@ export const useConfigStore = defineStore('config', () => {
 
   // 加载模块版本
   async function loadModuleVersion() {
-    try {
-      const content = await readFile(MODULE_PROP_PATH)
-      const versionMatch = content.match(/version=(.+)/)
-      if (versionMatch) {
-        moduleVersion.value = versionMatch[1].trim()
-      }
+    // 首选宿主直供的 `ksu.moduleInfo()`：不依赖文件读写、也不依赖模块目录名。
+    const moduleInfo = getModuleInfo()
+    let version = (moduleInfo?.version || '').trim()
+    let author = (moduleInfo?.author || '').trim()
 
-      const authorMatch = content.match(/author=(.+)/)
-      if (authorMatch) {
-        moduleAuthor.value = authorMatch[1].trim()
+    if (!version || !author) {
+      const candidates: string[] = []
+      if (moduleInfo?.moduleDir) {
+        candidates.push(`${moduleInfo.moduleDir.replace(/\/+$/, '')}/module.prop`)
       }
-    } catch {
-      // 使用默认版本
+      candidates.push(...MODULE_PROP_FALLBACK_PATHS)
+
+      for (const path of candidates) {
+        try {
+          const content = await readFile(path)
+          if (!content) continue
+          if (!version) version = parseModulePropValue(content, 'version')
+          if (!author) author = parseModulePropValue(content, 'author')
+          if (version && author) break
+        } catch {
+          // 该路径不可读（不存在 / 无权限），继续尝试下一个
+        }
+      }
+    }
+
+    if (version) {
+      moduleVersion.value = version
+    }
+    if (author) {
+      moduleAuthor.value = author
     }
   }
 
@@ -346,81 +384,44 @@ export const useConfigStore = defineStore('config', () => {
     }
   }
 
-  // 检查包名是否已配置
-  function isPackageConfigured(packageName: string): boolean {
-    const hasUserSuffix = /@\d+$/.test(packageName)
-
-    // 先尝试精确匹配，保留多用户后缀
+  function collectConfigPackageNames(): string[] {
+    const packages: string[] = []
+    for (const app of apps.value) {
+      packages.push(app.package)
+    }
     for (const template of Object.values(templates.value)) {
-      if (template.packages?.includes(packageName)) {
-        return true
+      if (template.packages) {
+        packages.push(...template.packages)
       }
     }
-
-    if (apps.value.some((a) => a.package === packageName)) {
-      return true
-    }
-
-    // 仅当调用方带有 userId 后缀时，才做归一化匹配以兼容旧配置
-    if (!hasUserSuffix) {
-      return false
-    }
-
-    const normalized = normalizePackageName(packageName)
-
-    for (const template of Object.values(templates.value)) {
-      if (template.packages?.some((pkg) => normalizePackageName(pkg) === normalized)) {
-        return true
-      }
-    }
-
-    return apps.value.some((a) => normalizePackageName(a.package) === normalized)
+    return packages
   }
 
-  // 获取包名的配置
+  // 检查包名是否已配置（与 Rust 运行时查找键一致，禁止 @userId 互相串）
+  function isPackageConfigured(packageName: string): boolean {
+    return anyConfigApplies(collectConfigPackageNames(), packageName)
+  }
+
+  // 获取包名的最终配置（与 Rust 运行时同序：键优先，同键内 apps 先于模板）
   function getPackageConfig(
     packageName: string
   ): (Template & { source: string }) | AppConfig | null {
-    const hasUserSuffix = /@\d+$/.test(packageName)
-
-    // 先精确匹配
-    const exactApp = apps.value.find((a) => a.package === packageName)
-    if (exactApp) {
-      return exactApp
-    }
-
-    for (const [name, template] of Object.entries(templates.value)) {
-      if (template.packages?.includes(packageName)) {
-        return { ...template, source: name }
-      }
-    }
-
-    // 仅当调用方带有 userId 后缀时，才做归一化匹配（向后兼容旧配置）
-    if (!hasUserSuffix) {
+    const resolved = resolvePackageConfig(packageName, apps.value, templateEntries.value)
+    if (!resolved) {
       return null
     }
 
-    const normalized = normalizePackageName(packageName)
-
-    const normalizedApp = apps.value.find((a) => normalizePackageName(a.package) === normalized)
-    if (normalizedApp) {
-      return normalizedApp
-    }
-
-    for (const [name, template] of Object.entries(templates.value)) {
-      if (template.packages?.some((pkg) => normalizePackageName(pkg) === normalized)) {
-        return { ...template, source: name }
-      }
-    }
-
-    return null
+    return resolved.kind === 'app'
+      ? resolved.app
+      : { ...resolved.template, source: resolved.templateName }
   }
 
-  // 切换工作模式
-  async function toggleWorkMode() {
-    const currentMode = config.value.default_mode || 'lite'
-    config.value.default_mode = currentMode === 'lite' ? 'full' : 'lite'
-    await saveConfig()
+  /**
+   * 逐键扫描、命中即停的解析结果：同一键上的 [[apps]] / 模板两类命中 + 是否继承主应用回退配置。
+   * 配置对话框用它判断「本实例到底用哪份配置」（与 Rust 运行时严格同源，不跨键混用）。
+   */
+  function resolvePackageMatchesFor(packageName: string) {
+    return resolvePackageMatches(packageName, apps.value, templateEntries.value)
   }
 
   return {
@@ -453,6 +454,6 @@ export const useConfigStore = defineStore('config', () => {
     getDeviceFakerCount,
     isPackageConfigured,
     getPackageConfig,
-    toggleWorkMode,
+    resolvePackageMatchesFor,
   }
 })

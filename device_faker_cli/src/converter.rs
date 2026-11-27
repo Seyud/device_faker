@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2025-2026 Seyud
+// Device Faker: https://github.com/Seyud/device_faker
+
 use std::{
     collections::BTreeMap,
     fs::{self, File},
@@ -78,6 +82,16 @@ const SDK_INT_KEYS: &[&str] = &[
     "ro.vendor.build.version.sdk",
     "ro.product.build.version.sdk",
 ];
+const HARDWARE_KEYS: &[&str] = &["ro.hardware"];
+const BOARD_KEYS: &[&str] = &["ro.product.board"];
+const SECURITY_PATCH_KEYS: &[&str] = &[
+    "ro.build.version.security_patch",
+    "ro.system.build.version.security_patch",
+    "ro.vendor.build.version.security_patch",
+    "ro.product.build.version.security_patch",
+    // vendor 分区独有的裸名副本（无 .version. 段）。
+    "ro.vendor.build.security_patch",
+];
 
 #[derive(Debug, Serialize)]
 struct OutputConfig {
@@ -102,9 +116,15 @@ struct DeviceTemplateToml {
     #[serde(skip_serializing_if = "Option::is_none")]
     product: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    hardware: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    board: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     fingerprint: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     build_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    security_patch: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     characteristics: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -122,8 +142,11 @@ impl DeviceTemplateToml {
             || self.name.is_some()
             || self.device.is_some()
             || self.product.is_some()
+            || self.hardware.is_some()
+            || self.board.is_some()
             || self.fingerprint.is_some()
             || self.build_id.is_some()
+            || self.security_patch.is_some()
             || self.characteristics.is_some()
             || self.android_version.is_some()
             || self.sdk_int.is_some()
@@ -205,8 +228,11 @@ fn build_template(properties: &BTreeMap<String, String>) -> DeviceTemplateToml {
         name,
         device,
         product: read_non_empty_property(properties, PRODUCT_KEYS),
+        hardware: read_non_empty_property(properties, HARDWARE_KEYS),
+        board: read_non_empty_property(properties, BOARD_KEYS),
         fingerprint: read_non_empty_property(properties, FINGERPRINT_KEYS),
         build_id: read_non_empty_property(properties, BUILD_ID_KEYS),
+        security_patch: read_non_empty_property(properties, SECURITY_PATCH_KEYS),
         characteristics: read_non_empty_property(properties, CHARACTERISTICS_KEYS),
         android_version: read_non_empty_property(properties, ANDROID_VERSION_KEYS),
         sdk_int: parse_sdk_int(properties),
@@ -290,7 +316,7 @@ fn extract_zip_to_dir(zip_path: &str, dest: &Path) -> Result<()> {
         };
 
         let out_path = dest.join(rel_path);
-        if entry.name().ends_with('/') {
+        if entry.name()?.ends_with('/') {
             fs::create_dir_all(&out_path).context("failed to create directory from ZIP")?;
             continue;
         }
@@ -412,8 +438,10 @@ mod tests {
             ro.product.name=haotian
             ro.product.device=haotian
             ro.product.product=haotian
+            ro.product.board=kalama
             ro.build.fingerprint=Xiaomi/haotian/haotian:15/AP4A.250205.002/123456:user/release-keys
             ro.build.id=AP4A.250205.002
+            ro.build.version.security_patch=2025-06-05
             ro.build.characteristics=nosdcard
             ro.build.version.release=15
             ro.build.version.sdk=35
@@ -428,14 +456,40 @@ mod tests {
         assert_eq!(template.name.as_deref(), Some("haotian"));
         assert_eq!(template.device.as_deref(), Some("haotian"));
         assert_eq!(template.product.as_deref(), Some("haotian"));
+        assert_eq!(template.board.as_deref(), Some("kalama"));
         assert_eq!(
             template.fingerprint.as_deref(),
             Some("Xiaomi/haotian/haotian:15/AP4A.250205.002/123456:user/release-keys")
         );
         assert_eq!(template.build_id.as_deref(), Some("AP4A.250205.002"));
+        assert_eq!(template.security_patch.as_deref(), Some("2025-06-05"));
         assert_eq!(template.characteristics.as_deref(), Some("nosdcard"));
         assert_eq!(template.android_version.as_deref(), Some("15"));
         assert_eq!(template.sdk_int, Some(35));
+    }
+
+    #[test]
+    fn security_patch_prefers_version_keys_over_vendor_bare_name() {
+        // 标准 key 与 vendor 裸名副本同时存在时，取标准 key
+        let properties = parse_property_text(
+            r#"
+            ro.build.version.security_patch=2025-06-05
+            ro.vendor.build.security_patch=2024-12-01
+            "#,
+        );
+        let template = build_template(&properties);
+        assert_eq!(template.security_patch.as_deref(), Some("2025-06-05"));
+
+        // 只有裸名副本的机型（无 .version. 变体）也能导入。
+        let properties = parse_property_text(
+            r#"
+            ro.product.manufacturer=Xiaomi
+            ro.product.model=25010PN30C
+            ro.vendor.build.security_patch=2024-12-01
+            "#,
+        );
+        let template = build_template(&properties);
+        assert_eq!(template.security_patch.as_deref(), Some("2024-12-01"));
     }
 
     #[test]

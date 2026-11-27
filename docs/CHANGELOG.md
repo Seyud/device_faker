@@ -1,5 +1,82 @@
 # 📝更新日志
 
+## ⬆️[v1.6.0 → v1.7.0] - 2026-11-09
+
+### 🆕 新功能
+- 🩺 app 域不可读的属性区也能伪装
+- 🚀 WebUI 接入 KernelSU pm/io 接口，包枚举与文件读写全程零 shell fork
+- 🔄 模板转换改纯前端，直接导入旧模块 ZIP / system.prop，无需 CLI 与临时文件
+- 🎯 在线模板库支持按模板描述搜索，一次拉取聚合文件替代逐文件请求
+- 🧩 补齐 custom_props 显式指令与 __DELETE__（soc_model / android_version 删族、sdk_int 可删除）
+- 🪟 前台应用检测改用 TOP 集合，多窗口 / 小窗下不再误识别
+- 🏷️ 日志新增版本 banner（版本号 + git hash + 构建时间）
+
+### 🐛 修复
+- 🛡️ 修复因 Zygisk Next 1.5.3 的 sepolicy.rule 大改导致读不到配置伪装全部失效（配置改由 companion 读取）
+- 🎲 修复多模板声明同一包名时机型随机（命中改为 config 书写顺序，WebUI 提示争用）
+- 🇨🇳 修复中文设备安装文案显示英文
+- 🔍 修复 WebUI 分身配置解析错位、编辑分身会误删主应用条目
+- 🧹 修复同一应用实例重复显示与「已配置」误判，并标注配置作用范围
+- 🕵️ 属性区副本改为匿名映射伪装
+- 🧪 修复 hybrid 模式冷启动窗口内属性未生效（companion_resetprop 也跑进程内 COW）
+
+### ⚡ 改进
+- 🏎️ companion 读取属性零 fork —— 存在性判定与备份直接查属性区
+- 👻 属性写入「本机不存在就不写」，不再留下可枚举的幽灵属性
+- 📦 模块不再打包 device_faker_cli，安装包体积减小
+- 🧱 cow_props 拆分为 11 个模块，职责分层便于维护
+- ⬆️ 依赖全量升级：rsbinder 0.11、WebUI 依赖 20+ 项、CI 升 NDK r30
+
+## ⬆️[v1.5.0 → v1.6.0] - 2026-09-26
+
+### 🆕 新功能
+- 🏷️ Build层新增 Build.BOARD / Build.SOC_MODEL 伪装
+- 📅 新增 security_patch 安全补丁日期伪装字段
+- 🆔 新增 display_id / incremental 专用伪装字段
+- 📐 新增按应用 DPI 伪装支持
+- ✏️ WebUI 自定义属性伪装开放编辑
+- 📦 安装脚本 Zygisk 检测兼容独特 Zygisk 实现
+- 🔗 关注模块弹窗新增官网入口
+
+### 🐛 修复
+- 🔄 修复前台门控两类失效 — 应用首启竞态与 packages.list 快照过期
+- 🌐 修复在线模板库大量加载失败
+- 🧹 修复开关改回默认后键值残留问题
+- 🎯 修复多开包名「已配置」状态误判
+- 🔒 属性区改用进程私有副本，消除 maps 中的 rw-p 指纹
+- ⏱️ 切后台恢复提速至 0.5 秒
+
+### ⚡ 改进
+- 🏎️ 长属性值支持原地更新，无需删除重建
+- 🤖 rsbinder 升级至 0.10，适配 Android 10~17
+- 🗑️ 移除 CPU 伪装功能
+- 🔇 非 debug 模式下模块与 companion 完全静默
+- 🚀 WebUI 首屏路径瘦身与应用列表性能优化
+- 💾 安装脚本默认保留已有配置
+
+## ⬆️[v1.4.0 → v1.5.0] - 2026-08-01
+
+### 🆕 新功能
+- 🌍 新增土耳其语翻译
+- 🧬 新增CPU伪装能力
+- 👥 WebUI应用页支持显示多用户应用
+- 📦 安装脚本新增Zygisk检测与中英双语自动切换
+- 🔒 新增COW属性伪造引擎 — 替代full模式，per-process隔离零驻留
+- 🔄 companion_resetprop 开关替代 resetprop 模式
+- 🏷️ Build层新增 Build.HARDWARE 伪装
+
+### ⚡ 改进
+- ⚡ 优化模块底层性能（by @Tools-cx-app）
+- 👆 WebUI支持侧滑返回逐级导航
+- 🎬 优化WebUI页面衔接动画
+- 🏗️ 日志系统重构
+- 🎨 优化WebUI样式
+- 📦 更新WebUI构建依赖
+- 🏗️ 移除WebUI-X API，采用纯KernelSU WebUI API
+- 🏎️ resetprop 启用 skip_svc 直写 + 属性区压缩
+- 🏗️ 移除模式区分 — 统一为COW + companion唯一执行流
+- 🔄 companion resetprop 恢复机制重构优化
+
 ## ⬆️[v1.3.5 → v1.4.0] - 2026-05-02
 
 ### 🆕 新功能

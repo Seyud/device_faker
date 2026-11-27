@@ -1,3 +1,9 @@
+<!--
+  SPDX-License-Identifier: GPL-3.0-or-later
+  Copyright (c) 2025-2026 Seyud
+  Device Faker: https://github.com/Seyud/device_faker
+-->
+
 <template>
   <div class="template-card glass-effect">
     <div class="template-header">
@@ -22,7 +28,7 @@
           :aria-label="t('common.edit')"
           @click="emit('edit', name, template)"
         >
-          <Edit2 :size="18" />
+          <PenLine :size="18" />
         </button>
         <button
           class="icon-btn danger"
@@ -31,7 +37,7 @@
           :aria-label="t('common.delete')"
           @click="emit('delete', name)"
         >
-          <Trash2 :size="18" />
+          <Trash :size="18" />
         </button>
       </div>
     </div>
@@ -49,18 +55,6 @@
         <span class="detail-label">{{ t('templates.fields.model') }}:</span>
         <span class="detail-value">{{ template.model }}</span>
       </div>
-      <div v-if="template.mode" class="detail-item">
-        <span class="detail-label">{{ t('templates.labels.mode') }}:</span>
-        <span class="detail-value">
-          {{
-            template.mode === 'lite'
-              ? t('templates.values.lite')
-              : template.mode === 'full'
-                ? t('templates.values.full')
-                : t('templates.values.resetprop')
-          }}
-        </span>
-      </div>
       <div v-if="template.build_id" class="detail-item">
         <span class="detail-label">{{ t('templates.fields.build_id') }}:</span>
         <span class="detail-value">{{ template.build_id }}</span>
@@ -74,6 +68,10 @@
         <span class="detail-value">
           {{ template.force_denylist_unmount ? t('common.enabled') : t('common.disabled') }}
         </span>
+      </div>
+      <div v-if="template.companion_resetprop" class="detail-item">
+        <span class="detail-label">{{ t('templates.fields.companion_resetprop') }}:</span>
+        <span class="detail-value">{{ t('common.enabled') }}</span>
       </div>
       <div v-if="template.packages && template.packages.length > 0" class="detail-item">
         <span class="detail-label">{{ t('templates.labels.packages') }}:</span>
@@ -109,7 +107,7 @@
 </template>
 
 <script setup lang="ts">
-import { Copy, Edit2, Trash2 } from 'lucide-vue-next'
+import { Copy, PenLine, Trash } from '@lucide/vue'
 import { toRefs } from 'vue'
 import { useI18n } from '../../utils/i18n'
 import type { Template } from '../../types'

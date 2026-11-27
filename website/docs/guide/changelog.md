@@ -1,0 +1,186 @@
+---
+title: 更新日志
+lastUpdated: false
+---
+
+# 📝更新日志
+
+## ⬆️[v1.6.0 → v1.7.0] - 2026-11-09
+
+### 🆕 新功能
+- 🩺 app 域不可读的属性区也能伪装
+- 🚀 WebUI 接入 KernelSU pm/io 接口，包枚举与文件读写全程零 shell fork
+- 🔄 模板转换改纯前端，直接导入旧模块 ZIP / system.prop，无需 CLI 与临时文件
+- 🎯 在线模板库支持按模板描述搜索，一次拉取聚合文件替代逐文件请求
+- 🧩 补齐 custom_props 显式指令与 __DELETE__（soc_model / android_version 删族、sdk_int 可删除）
+- 🪟 前台应用检测改用 TOP 集合，多窗口 / 小窗下不再误识别
+- 🏷️ 日志新增版本 banner（版本号 + git hash + 构建时间）
+
+### 🐛 修复
+- 🛡️ 修复因 Zygisk Next 1.5.3 的 sepolicy.rule 大改导致读不到配置伪装全部失效（配置改由 companion 读取）
+- 🎲 修复多模板声明同一包名时机型随机（命中改为 config 书写顺序，WebUI 提示争用）
+- 🇨🇳 修复中文设备安装文案显示英文
+- 🔍 修复 WebUI 分身配置解析错位、编辑分身会误删主应用条目
+- 🧹 修复同一应用实例重复显示与「已配置」误判，并标注配置作用范围
+- 🕵️ 属性区副本改为匿名映射伪装
+- 🧪 修复 hybrid 模式冷启动窗口内属性未生效（companion_resetprop 也跑进程内 COW）
+
+### ⚡ 改进
+- 🏎️ companion 读取属性零 fork —— 存在性判定与备份直接查属性区
+- 👻 属性写入「本机不存在就不写」，不再留下可枚举的幽灵属性
+- 📦 模块不再打包 device_faker_cli，安装包体积减小
+- 🧱 cow_props 拆分为 11 个模块，职责分层便于维护
+- ⬆️ 依赖全量升级：rsbinder 0.11、WebUI 依赖 20+ 项、CI 升 NDK r30
+
+## ⬆️[v1.5.0 → v1.6.0] - 2026-09-26
+
+### 🆕 新功能
+- 🏷️ Build层新增 Build.BOARD / Build.SOC_MODEL 伪装
+- 📅 新增 security_patch 安全补丁日期伪装字段
+- 🆔 新增 display_id / incremental 专用伪装字段
+- 📐 新增按应用 DPI 伪装支持
+- ✏️ WebUI 自定义属性伪装开放编辑
+- 📦 安装脚本 Zygisk 检测兼容独特 Zygisk 实现
+- 🔗 关注模块弹窗新增官网入口
+
+### 🐛 修复
+- 🔄 修复前台门控两类失效 — 应用首启竞态与 packages.list 快照过期
+- 🌐 修复在线模板库大量加载失败
+- 🧹 修复开关改回默认后键值残留问题
+- 🎯 修复多开包名「已配置」状态误判
+- 🔒 属性区改用进程私有副本，消除 maps 中的 rw-p 指纹
+- ⏱️ 切后台恢复提速至 0.5 秒
+
+### ⚡ 改进
+- 🏎️ 长属性值支持原地更新，无需删除重建
+- 🤖 rsbinder 升级至 0.10，适配 Android 10~17
+- 🗑️ 移除 CPU 伪装功能
+- 🔇 非 debug 模式下模块与 companion 完全静默
+- 🚀 WebUI 首屏路径瘦身与应用列表性能优化
+- 💾 安装脚本默认保留已有配置
+
+## ⬆️[v1.4.0 → v1.5.0] - 2026-08-01
+
+### 🆕 新功能
+- 🌍 新增土耳其语翻译
+- 🧬 新增CPU伪装能力
+- 👥 WebUI应用页支持显示多用户应用
+- 📦 安装脚本新增Zygisk检测与中英双语自动切换
+- 🔒 新增COW属性伪造引擎 — 替代full模式，per-process隔离零驻留
+- 🔄 companion_resetprop 开关替代 resetprop 模式
+- 🏷️ Build层新增 Build.HARDWARE 伪装
+
+### ⚡ 改进
+- ⚡ 优化模块底层性能（by @Tools-cx-app）
+- 👆 WebUI支持侧滑返回逐级导航
+- 🎬 优化WebUI页面衔接动画
+- 🏗️ 日志系统重构
+- 🎨 优化WebUI样式
+- 📦 更新WebUI构建依赖
+- 🏗️ 移除WebUI-X API，采用纯KernelSU WebUI API
+- 🏎️ resetprop 启用 skip_svc 直写 + 属性区压缩
+- 🏗️ 移除模式区分 — 统一为COW + companion唯一执行流
+- 🔄 companion resetprop 恢复机制重构优化
+
+## ⬆️[v1.3.5 → v1.4.0] - 2026-05-02
+
+### 🆕 新功能
+- 🖥️ WebUI应用页支持系统应用显示切换
+- 🌐 WebUI加入在线模板GitHub源
+- 🏷️ 为三种模式补充 build_id 与 Build.ID 伪装支持
+- 📥 WebUI模板页新增导入/导出工具与本机模板导出功能
+- 📤 WebUI模板页模板卡片添加导出按钮
+- 👆 WebUI支持左右滑动切换页面
+- ✏️ WebUI模板页支持编辑已存在模板名称
+
+### 🐛 修复
+- 🧹 修复WebUI模板编辑页清空部分字段后旧值残留问题
+- 🔄 修复resetprop模式自定义属性伪装会话在前后台切换时的状态同步问题
+
+### ⚡ 改进
+- 🔗 更新适配jni 0.22 API
+- ⚡ 大幅优化WebUI页面切换性能
+- 🏎️ 优化WebUI应用列表加载性能
+- 🏗️ 重构WebUI在线模板库全链路
+- 📏 使用最前沿Web技术 pretext 优化WebUI在线模板虚拟列表文本高度测量
+- 🚀 优化WebUI首屏切页响应
+- 🎬 添加WebUI页面切换动画
+- 🦀 将外部调用resetprop二进制重构为内置Rust库（by @Tools-cx-app）
+- 💾 改进配置文件备份格式
+
+## ⬆️[v1.3.0 → v1.3.5] - 2026-03-20
+
+### 🆕 新功能
+- 👁️ WebUI主页添加关注模块
+
+### 🐛 修复
+- 🔧 修复新版本Android System WebView渲染逻辑改变导致的WebUI无法滑动
+- 🔧 修复旧版本Android System WebView不支持ES2022标准无法解析配置
+
+### ⚡ 改进
+- 🏗️ 使用xtask替换python脚本进行核心编译（by @Tools-cx-app）
+- 🌐 WebUI优化在线模板库加载，增加wget加载方式并实现重试机制
+- 🎨 优化WebUI应用配置编辑界面交互
+- ⚡ 优化WebUI应用列表加载显示
+- 📋 完善WebUI配置读取解析与编辑保存
+
+## ⬆️[v1.2.0 → v1.3.0] - 2026-01-22
+
+### 🆕 新功能
+- 📦 WebUI支持显示未安装但已配置的包名
+- 🏷️ WebUI在线模板库新增品牌分类
+- 🤖 新增Android版本伪装和自定义属性功能
+- 🔍 添加模板搜索功能
+- 👥 WebUI支持显示区分多用户包名
+
+### ⚡ 改进
+- 🎨 优化WebUI样式及布局
+- ⚡ 优化WebUI应用列表加载
+- 🔧 characteristics 字段支持full模式
+- 🔒 优化full模式__system_property_get 函数拦截
+- 🔄 重构WebUI配置转换，支持直接选择
+
+## ⬆️[v1.1.0 → v1.2.0] - 2025-12-17
+
+### 🆕 新功能
+- 🌐 WebUI添加在线模板库功能
+- 🛠️ 添加CLI工具用于配置转换和在线模板加载
+- 🔧 添加resetprop模式支持及characteristics属性
+- 🌍 WebUI新增多语言支持
+- 📋 添加FORCE_DENYLIST_UNMOUNT支持
+- 👥 添加对多用户环境的配置支持
+
+### ⚡ 改进
+- 💾 安装脚本更改备份文件后缀为.bak以便于恢复
+- 📱 WebUI适配KernelSU API 2.1.1以支持KernelSU 2.1.2及以上版本应用名称和图标显示
+- 🎨 适配KernelSU WebUI沉浸标准
+- 🌐 WebUI使用fetch API替代curl命令进行网络请求，提升兼容性
+- 🏗️ 模块化架构重构Zygisk模块核心
+- 🎨 优化WebUI显示和布局
+- 🏗️ 重构WebUI模板页面为组件化结构
+- 🔄 将C++ atexit实现迁移为Rust实现
+- 📋 WebUI添加配置元数据支持
+
+## ⬆️[v1.0.5 → v1.1.0] - 2025-11-09
+
+### 🆕 新功能
+- 🌐 新增WebUI界面，提供更友好的配置管理体验
+- ⚙️ 安装脚本添加配置选择功能，支持个性化安装选项
+
+### ⚡ 改进
+- 🗺️ 优化配置字段属性映射逻辑，提升配置处理效率
+- 📦 迁移到新的zygisk-api-rs库并更新依赖，兼容更多Zygisk实现
+- 🔧 更新Rust edition至2024版本，利用最新语言特性
+- 📚 优化配置文档结构，提升可读性和易用性
+
+## ⬆️[v1.0.0 → v1.0.5] - 2025-11-04
+
+### 🆕 新功能
+- 📱 新增机型模板配置，便捷应用到多包名
+- 🔄 新增lite和full双模式配置，满足不同使用场景
+- 💾 新增模块安装备份配置机制，提升稳定性
+
+### ⚡ 改进
+- 🚀 优化核心性能和体积，运行更流畅
+- 🧩 优化模块卸载逻辑，减少驻留时间
+- 🎯 使用 local_cxa_atexit_finalize_impl 减少运行痕迹

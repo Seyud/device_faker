@@ -1,3 +1,9 @@
+<!--
+  SPDX-License-Identifier: GPL-3.0-or-later
+  Copyright (c) 2025-2026 Seyud
+  Device Faker: https://github.com/Seyud/device_faker
+-->
+
 <template>
   <div class="template-list">
     <TemplateCard
@@ -21,7 +27,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { FileText } from 'lucide-vue-next'
+import { FileText } from '@lucide/vue'
 import TemplateCard from './TemplateCard.vue'
 import { useI18n } from '../../utils/i18n'
 import type { Template } from '../../types'
@@ -52,8 +58,13 @@ const emptyText = computed(() => {
 
 <style scoped>
 .template-list {
-  display: flex;
-  flex-direction: column;
+  /*
+   * 宽屏自动分列：模板卡比较矮，单卡最窄 20rem，内容列 960px 时两到三列。
+   * min(100%, 20rem) 保证极窄容器不溢出。
+   */
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
+  align-items: start;
   gap: 1rem;
   box-sizing: border-box;
 }
@@ -68,6 +79,8 @@ const emptyText = computed(() => {
   border-radius: 1rem;
   background: var(--card);
   border: 1px solid var(--border);
+  /* 空态占满整行（列表在宽屏下是网格） */
+  grid-column: 1 / -1;
 }
 
 .empty-icon {
